@@ -13,6 +13,7 @@ const MAX_TICKET_COST = 1152921504606846976
 var hp = MAX_HP
 var max_hp = MAX_HP
 var money = START_MONEY
+var difficulty = "hard"
 var stage = 1
 var board_width = 8
 var board_height = 8
@@ -56,7 +57,7 @@ func _has(id: String) -> bool:
 
 
 func _rules_for(number: int, with_pending: bool = false) -> Dictionary:
-	var rules = StageRules.for_stage(number)
+	var rules = StageRules.for_stage(number, difficulty)
 	var effective = owned_augments.duplicate()
 	if with_pending and not pending_augment.is_empty():
 		effective.append(pending_augment)

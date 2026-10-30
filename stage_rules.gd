@@ -16,10 +16,10 @@ static func dig_cost(stage_number: int) -> int:
 	return 2 * current
 
 
-static func for_stage(stage_number: int) -> Dictionary:
+static func for_stage(stage_number: int, difficulty: String = "hard") -> Dictionary:
 	var current = maxi(1, stage_number)
 	var step = current - 1
-	var side = BASE_SIDE + SIDE_GROWTH * step
+	var side = BASE_SIDE + (1 if difficulty == "easy" else SIDE_GROWTH) * step
 	var density = minf(BASE_DENSITY + DENSITY_GROWTH * step, MAX_DENSITY)
 	var cost = dig_cost(current)
 	return {

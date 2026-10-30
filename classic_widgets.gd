@@ -131,6 +131,24 @@ class HealthGauge extends Control:
 		draw_string(font, Vector2((size.x - width) / 2, 52), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color("#f0f6ef"))
 
 
+class TileButton extends Button:
+	# Draw numbers without Button text affecting the grid's minimum size.
+	var number_text = "":
+		set(value):
+			number_text = value
+			queue_redraw()
+	var number_color = Color.BLACK
+
+	func _draw():
+		if number_text.is_empty():
+			return
+		var font = get_theme_font("font")
+		var pixels = get_theme_font_size("font_size")
+		var width = font.get_string_size(number_text, HORIZONTAL_ALIGNMENT_LEFT, -1, pixels).x
+		var baseline = (size.y - font.get_height(pixels)) / 2 + font.get_ascent(pixels)
+		draw_string(font, Vector2((size.x - width) / 2, baseline), number_text, HORIZONTAL_ALIGNMENT_LEFT, -1, pixels, number_color)
+
+
 class TileMark extends Control:
 	var mark = "":
 		set(next):

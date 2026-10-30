@@ -3,6 +3,7 @@ const Widgets = preload("res://classic_widgets.gd")
 const Art = preload("res://augment_art.gd")
 const TicketArt = preload("res://ticket_animation.gd")
 
+var mode_overlay: Control
 var stats_label: Label
 var rules_label: Label
 var message_label: Label
@@ -81,6 +82,8 @@ func _ready():
 	rng.randomize()
 	_build_ui()
 	_new_run()
+	_build_mode_menu()
+	_show_mode_menu()
 	set_process(false)
 
 
@@ -178,7 +181,7 @@ func _build_ui():
 	face_center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	smile_column.add_child(face_center)
 	face_button = Widgets.FaceButton.new()
-	face_button.pressed.connect(_new_run)
+	face_button.pressed.connect(_show_mode_menu)
 	face_center.add_child(face_button)
 	hp_label = _health_counter(display_row)
 	var mine_row = HBoxContainer.new()
@@ -358,7 +361,7 @@ func _build_choice_overlay():
 	var restart = Button.new()
 	restart.text = "새로운 10스테이지 런 시작"
 	restart.custom_minimum_size.y = 52
-	restart.pressed.connect(_new_run)
+	restart.pressed.connect(_show_mode_menu)
 	victory_panel.add_child(restart)
 
 
@@ -780,7 +783,7 @@ func _build_board_view():
 	number_font.base_font = load("res://assets/fonts/NotoSansKR.ttf")
 	number_font.variation_embolden = 1.0
 	for i in range(cells.size()):
-		var button = Button.new()
+		var button = Widgets.TileButton.new()
 		var tile_size = 44 if board_width <= 12 else (28 if board_width >= 26 else 30)
 		button.custom_minimum_size = Vector2(tile_size, tile_size)
 		button.focus_mode = Control.FOCUS_NONE
@@ -822,6 +825,8 @@ func _on_tile_hover(index):
 
 
 func _input(event):
+	if phase == "menu":
+		return
 	if is_instance_valid(ticket_overlay) and ticket_overlay.visible and event is InputEventKey:
 		get_viewport().set_input_as_handled()
 		if event.pressed and not event.echo and ticket_pending.is_empty() and event.keycode in [KEY_ESCAPE, KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]:
@@ -988,7 +993,7 @@ func _refresh():
 			confirmed += 1
 			if cell.get("stealth", false):
 				confirmed_special += 1
-	stage_label.text = "STAGE %02d / 10" % stage
+	stage_label.text = ("이지 · " if difficulty == "easy" else "하드 · ") + "STAGE %02d / 10" % stage
 	hp_label.maximum = max_hp
 	hp_label.value = hp
 	money_label.value = money
@@ -1080,7 +1085,7 @@ func _refresh():
 func _refresh_tile(index):
 	var cell = cells[index]
 	var button = tile_buttons[index]
-	button.text = ""
+	button.number_text = ""
 	button.modulate = Color.WHITE
 	if not scan_result.is_empty() and index in scan_result["indices"]:
 		button.modulate = Color("#c3d8ff")
@@ -1096,9 +1101,9 @@ func _refresh_tile(index):
 			mark = "mine"
 			style_key = "mine"
 		else:
-			button.text = str(cell["adjacent"]) if cell["adjacent"] > 0 else ""
+			button.number_text = str(cell["adjacent"]) if cell["adjacent"] > 0 else ""
 			if cell.get("obscured", false):
-				button.text = "?"
+				button.number_text = "?"
 			style_key = "open"
 			var colors = ["#c0c0c0", "#0000ff", "#008000", "#ff0000", "#000080", "#800000", "#008080", "#000000", "#808080"]
 			ink = Color(colors[cell["adjacent"]])
@@ -1113,6 +1118,8 @@ func _refresh_tile(index):
 	elif cell["flagged"]:
 		mark = "flag"
 		style_key = "flag"
+	button.number_color = ink
+	button.queue_redraw()
 	button.get_node("Mark").mark = mark
 	for state in ["normal", "hover", "pressed"]:
 		button.add_theme_stylebox_override(state, tile_styles[style_key])
@@ -1138,3 +1145,44 @@ func _refresh_tile(index):
 			button.tooltip_text += "\n은신지뢰는 숫자에 포함되지 않으며 주변 파기로도 폭발할 수 있습니다."
 	var clickable = not cell["revealed"] and not cell["settled"] or (chord["eligible"] and money >= chord["cost"])
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if phase == "playing" and clickable else Control.CURSOR_ARROW
+
+
+func _build_mode_menu():
+	mode_overlay = Control.new()
+	mode_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(mode_overlay)
+	var shade = ColorRect.new()
+	shade.color = Color(0.08, 0.08, 0.08, 0.92)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mode_overlay.add_child(shade)
+	var center = CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mode_overlay.add_child(center)
+	var panel = PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", Widgets.bevel(false, 28))
+	center.add_child(panel)
+	var column = VBoxContainer.new()
+	column.add_theme_constant_override("separation", 20)
+	panel.add_child(column)
+	_label(column, "지뢰찾기 · 난이도 선택", 32, "#202020")
+	_label(column, "두 모드 모두 8×8 시작 · 10스테이지 도전", 20, "#404040")
+	for mode in ["easy", "hard"]:
+		var button = Button.new()
+		button.text = "이지 모드 · 매 스테이지 +1×1 · 최종 17×17" if mode == "easy" else "하드 모드 · 매 스테이지 +2×2 · 최종 26×26"
+		button.custom_minimum_size = Vector2(590, 68)
+		button.pressed.connect(_select_mode.bind(mode))
+		column.add_child(button)
+
+func _show_mode_menu():
+	if not is_instance_valid(mode_overlay):
+		return
+	if not ticket_pending.is_empty():
+		return
+	_close_augment_details()
+	phase = "menu"
+	mode_overlay.show()
+
+func _select_mode(mode: String):
+	difficulty = mode
+	mode_overlay.hide()
+	_new_run()
