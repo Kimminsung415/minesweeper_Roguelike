@@ -1,0 +1,68 @@
+
+name: Build and Deploy Godot Web
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.5.1
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.5.1
+          use-dotnet: false
+          include-templates: true
+
+      - name: Import Godot resources
+        run: godot --headless --path . --editor --import --quit
+
+      - name: Export Web game
+        run: |
+          mkdir -p docs
+          touch docs/.gdignore docs/.nojekyll
+
+          godot --headless --path . --export-release "Web" docs/index.html
+
+          cp release.json docs/build.json
+
+          mkdir -p docs/licenses
+          find LICENSES -maxdepth 1 -type f -exec cp {} docs/licenses/ \;
+          cp assets/fonts/OFL.txt docs/licenses/NOTO_SANS_KR_OFL.txt
+          cp assets/IMAGE_SOURCES.md docs/licenses/
+
+          test -s docs/index.html
+          test -s docs/index.pck
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Web build
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
