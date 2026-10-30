@@ -2,6 +2,7 @@ extends Control
 
 const StageRules = preload("res://stage_rules.gd")
 const Augments = preload("res://augments.gd")
+const Upgrades = preload("res://upgrade_rules.gd")
 const MAX_HP = 10
 const START_MONEY = StageRules.START_MONEY
 const MINE_DAMAGE = 2
@@ -38,7 +39,10 @@ var shock_triggered = false
 var first_explosion = false
 var revival_used = false
 var last_commit = {}
-var expansion_level = 0
+var expansion_level = 0 # Legacy field; individual levels are authoritative.
+var augment_levels = {}
+var upgrade_target = ""
+var shield_charges = 0
 var ticket_purchases = 0
 var shop_result = ""
 var ticket_pending = {}
@@ -56,11 +60,11 @@ func _rules_for(number: int, with_pending: bool = false) -> Dictionary:
 	var effective = owned_augments.duplicate()
 	if with_pending and not pending_augment.is_empty():
 		effective.append(pending_augment)
-	var delta = (-2 if "decontamination" in effective else 0) + (3 if "overcrowding" in effective else 0)
+	var delta = (-int(_power("decontamination")) if "decontamination" in effective else 0) + (3 if "overcrowding" in effective else 0)
 	var capacity = mini(floori(rules["width"] * rules["height"] * StageRules.MAX_DENSITY), rules["width"] * rules["height"] - 9)
 	rules["mines"] = clampi(rules["mines"] + delta, 1, capacity)
 	rules["stealth"] = 1 if "stealth" in effective else 0
-	rules["max_hp"] = maxi(1, MAX_HP + (3 if "heart" in effective else 0) - (2 if "weakness" in effective else 0))
+	rules["max_hp"] = maxi(1, MAX_HP + (int(_power("heart")) if "heart" in effective else 0) + (int(_power("armor")) if "armor" in effective else 0) - (2 if "weakness" in effective else 0))
 	rules["dig_cost"] += 1 if "dig_tax" in effective else 0
 	if "reward_cut" in effective:
 		rules["mine_reward"] = maxi(1, floori(rules["mine_reward"] * 0.75))
@@ -72,6 +76,8 @@ func _new_run():
 	offered_augments.clear()
 	pending_augment = ""
 	revival_used = false
+	augment_levels.clear()
+	upgrade_target = ""
 	expansion_level = 0
 	ticket_purchases = 0
 	shop_result = ""
@@ -107,12 +113,13 @@ func _start_stage():
 	direct_digs = 0
 	echo_uses = 0
 	shield_ready = false
+	shield_charges = 0
 	accelerated_digs = 0
 	shock_triggered = false
 	first_explosion = false
 	last_commit.clear()
 	if _has("reserve"):
-		money = maxi(money, dig_cost * 3)
+		money = maxi(money, dig_cost * int(_power("reserve")))
 	cells.clear()
 	for i in range(board_width * board_height):
 		cells.append({"mine": false, "stealth": false, "adjacent": 0, "revealed": false, "flagged": false, "settled": false, "committed": false, "obscured": false})
@@ -205,7 +212,7 @@ func _toggle_flag(index: int):
 
 
 func _effective_dig_cost() -> int:
-	if accelerated_digs > 0 or (_has("frugal") and direct_digs < 3):
+	if accelerated_digs > 0 or (_has("frugal") and direct_digs < int(_power("frugal"))):
 		return 0
 	return dig_cost
 
@@ -240,7 +247,7 @@ func _chord_info(index: int) -> Dictionary:
 	# Preflight every currently diggable neighbor. Never count future rewards,
 	# reveals, or random echo results as funds already available to the player.
 	for offset in range(result["targets"].size()):
-		var free = accelerated_digs > offset or (_has("frugal") and direct_digs + offset < 3)
+		var free = accelerated_digs > offset or (_has("frugal") and direct_digs + offset < int(_power("frugal")))
 		if not free:
 			result["cost"] += dig_cost
 	result["eligible"] = true
@@ -286,7 +293,7 @@ func _apply_damage(amount: int):
 	hp = maxi(0, hp - amount)
 	if hp <= 0 and _has("revival") and not revival_used:
 		revival_used = true
-		hp = mini(max_hp, 4)
+		hp = mini(max_hp, int(_power("revival")))
 		message += "\n부활권 발동! HP %d" % hp
 
 
@@ -325,7 +332,8 @@ func _dig(index: int):
 	if accelerated_digs > 0:
 		accelerated_digs -= 1
 	var protected = shield_ready
-	shield_ready = false
+	shield_charges = maxi(0, shield_charges - 1)
+	shield_ready = shield_charges > 0
 	var mine_damage = 0
 	var first_blast = false
 	var first_hit = false
@@ -341,12 +349,12 @@ func _dig(index: int):
 		if mine_damage > 0:
 			shock_triggered = true
 		if _has("salvage"):
-			salvage = floori(mine_reward * 0.5)
+			salvage = floori(mine_reward * _power("salvage") / 100.0)
 			money += salvage
 		message = "지뢰 폭발 · 파기 -%d골드\n지뢰 피해 %d · 잔해 수입 +%d" % [cost, mine_damage, salvage]
 	else:
 		var opened = _reveal_area(index)
-		if _has("echo") and echo_uses < 4:
+		if _has("echo") and echo_uses < int(_power("echo")):
 			var extra = _hidden_safe()
 			_shuffle(extra)
 			if not extra.is_empty():
@@ -361,13 +369,13 @@ func _dig(index: int):
 	_apply_damage(mine_damage + ground_damage)
 	if hp > 0:
 		if first_hit and _has("shock"):
-			_heal(3)
-			message += "\n충격 흡수 +%d HP (최대 제한)" % _heal_amount(3)
-		if _has("regeneration") and direct_digs % 6 == 0:
+			_heal(int(_power("shock")))
+			message += "\n충격 흡수 +%d HP (최대 제한)" % _heal_amount(int(_power("shock")))
+		if _has("regeneration") and direct_digs % int(_power("regeneration")) == 0:
 			_heal(1)
 			message += "\n재생 세포 +1 HP (최대 제한)"
 		if first_blast and _has("dividend"):
-			money *= 2
+			money = floori(money * _power("dividend"))
 			message += "\n폭발 배당! 보유 골드 2배"
 	_finish_action()
 
@@ -400,12 +408,14 @@ func _reveal_area(start_index: int) -> int:
 func _pending_flags() -> Array:
 	var result = []
 	for i in range(cells.size()):
-		if cells[i]["flagged"] and not cells[i]["settled"] and not cells[i]["revealed"]:
+		if (cells[i]["flagged"] and not cells[i]["settled"] and not cells[i]["revealed"]) or (cells[i]["mine"] and cells[i]["settled"] and not cells[i].get("committed", false)):
 			result.append(i)
 	return result
 
 
 func _communication_allows_commit() -> bool:
+	if generated and _unsettled_mines().is_empty():
+		return true
 	if not _has("interference") or _pending_flags().size() >= 3:
 		return true
 	var hidden = 0
@@ -420,6 +430,10 @@ func _settle_mines(indices: Array, wrong: int = 0, manual: bool = false) -> Dict
 	var fuse_damage = 0
 	for index in indices:
 		var cell = cells[index]
+		if cell["mine"] and cell["settled"]:
+			# Previously exploded/safely confirmed mines finish bookkeeping for free.
+			# Their reward and damage remain consumed; never pay or trigger fuse twice.
+			cell["committed"] = true
 		if not cell["mine"] or cell["settled"] or cell["revealed"]:
 			continue
 		cell["flagged"] = false
@@ -428,13 +442,13 @@ func _settle_mines(indices: Array, wrong: int = 0, manual: bool = false) -> Dict
 		correct += 1
 		if _has("fuse") and rng.randf() < 0.20:
 			fuse_damage += 1
-	var bonus = mine_reward if _has("artisan") and correct >= 3 and wrong == 0 else 0
+	var bonus = floori(mine_reward * _power("artisan")) if _has("artisan") and correct >= 3 and wrong == 0 else 0
 	var fee = mini(correct * mine_reward + bonus, dig_cost) if correct > 0 and _has("settlement_fee") else 0
 	var earned = correct * mine_reward + bonus - fee
 	money += earned
 	var wrong_damage = wrong * _wrong_flag_damage()
 	if manual and insurance_ready:
-		wrong_damage = ceili(wrong_damage * 0.5)
+		wrong_damage = ceili(wrong_damage * (100.0 - _power("insurance")) / 100.0)
 		insurance_ready = false
 	var damage = wrong_damage + fuse_damage
 	message += "\n정답 %d · 오답 %d · +%d골드\n오답/신관 피해 %d (신관 %d)" % [correct, wrong, earned, damage, fuse_damage]
@@ -490,23 +504,26 @@ func _active_available(id: String) -> bool:
 	return ticket_pending.is_empty() and phase == "playing" and generated and hp > 0 and _has(id) and Augments.ALL.has(id) and Augments.ALL[id]["kind"] == Augments.ACTIVE and id not in used_actives and (id != "blood_trade" or hp >= 3)
 
 
-func _active_radius(id: String) -> int:
-	return {"domain": 1, "scanner": 2, "safe_dig": 0}.get(id, 0) + expansion_level
+func _level(id: String) -> int:
+	return clampi(int(augment_levels.get(id, 1)), 1, 4)
 
+func _power(id: String):
+	return Upgrades.value(id, _level(id))
+
+func _active_radius(id: String) -> int:
+	return int(_power(id))
 
 func _ticket_cost() -> int:
-	var cost = clampi(dig_cost * 6, 1, MAX_TICKET_COST)
-	for level in range(expansion_level):
-		# Saturate before multiplication so very high levels cannot wrap negative.
-		if cost >= MAX_TICKET_COST / 2:
-			return MAX_TICKET_COST
-		cost *= 2
-	return cost
-
+	return dig_cost * 6 * (1 << (_level(upgrade_target) - 1))
 
 func _ticket_chance() -> float:
-	return 0.10 * pow(0.8, expansion_level)
+	return [0.30, 0.20, 0.10, 0.0][_level(upgrade_target)-1]
 
+func _can_upgrade(id: String) -> bool:
+	return Upgrades.DATA.has(id) and _has(id) and _level(id) < 4 and phase == "playing" and generated and ticket_pending.is_empty() and targeting.is_empty() and money >= _ticket_cost_for(id)
+
+func _ticket_cost_for(id: String) -> int:
+	return dig_cost * 6 * (1 << (_level(id)-1))
 
 func _buy_upgrade_ticket():
 	if _begin_upgrade_ticket():
@@ -514,15 +531,15 @@ func _buy_upgrade_ticket():
 
 
 func _begin_upgrade_ticket() -> bool:
-	if not ticket_pending.is_empty() or phase != "playing" or not generated or hp <= 0 or not targeting.is_empty() or money < _ticket_cost():
+	if hp <= 0 or not _can_upgrade(upgrade_target):
 		return false
 	var cost = _ticket_cost()
 	var chance = _ticket_chance()
 	money -= cost
 	ticket_purchases += 1
 	# One charge and one real roll. The animation never consumes gameplay RNG.
-	ticket_pending = {"success": rng.randf() < chance, "cost": cost, "chance": chance, "level": expansion_level}
-	message = "영역 확장 강화 진행 중… · -%d골드" % cost
+	ticket_pending = {"success": rng.randf() < chance, "cost": cost, "chance": chance, "level": _level(upgrade_target), "id": upgrade_target}
+	message = Augments.ALL[upgrade_target]["name"] + " 강화 진행 중… · -%d골드" % cost
 	_refresh()
 	return true
 
@@ -534,8 +551,13 @@ func _resolve_upgrade_ticket():
 	ticket_pending.clear()
 	var cost = result["cost"]
 	if result["success"]:
-		expansion_level += 1
-		shop_result = "강화 성공! 영역 확장 Lv.%d · -%d골드" % [expansion_level, cost]
+		var id = result["id"]
+		var old_max = max_hp
+		augment_levels[id] = int(result["level"]) + 1
+		if id in ["heart", "armor"]:
+			max_hp = _rules_for(stage)["max_hp"] + vitality_bonus
+			hp = mini(max_hp, hp + maxi(0, max_hp - old_max))
+		shop_result = "강화 성공! %s Lv.%d · -%d골드" % [Augments.ALL[id]["name"], _level(id), cost]
 	else:
 		shop_result = "강화 실패 · -%d골드 · 레벨 유지" % cost
 	message = shop_result
@@ -575,7 +597,7 @@ func _use_active(id: String, target: int = -1):
 			_settle_mines(area_mines)
 		"hound":
 			_shuffle(mines)
-			_settle_mines(mines.slice(0, mini(2, mines.size())))
+			_settle_mines(mines.slice(0, mini(int(_power("hound")), mines.size())))
 		"scanner":
 			var indices = _area(target, _active_radius(id))
 			var count = 0
@@ -605,28 +627,29 @@ func _use_active(id: String, target: int = -1):
 			message += "\n범위 내 지뢰 확정. 보상·피해 없음."
 		"survey":
 			_shuffle(safe)
-			for index in safe.slice(0, mini(3, safe.size())):
+			for index in safe.slice(0, mini(int(_power("survey")), safe.size())):
 				_reveal_one(index)
 		"shield":
+			shield_charges = int(_power("shield"))
 			shield_ready = true
 		"transfusion":
-			_heal(3)
+			_heal(int(_power("transfusion")))
 		"grant":
-			money += dig_cost * 4
+			money += dig_cost * int(_power("grant"))
 		"audit":
 			_shuffle(wrong_flags)
-			for index in wrong_flags.slice(0, mini(3, wrong_flags.size())):
+			for index in wrong_flags.slice(0, mini(int(_power("audit")), wrong_flags.size())):
 				cells[index]["flagged"] = false
 		"acceleration":
-			accelerated_digs = 4
+			accelerated_digs = int(_power("acceleration"))
 		"vitality":
-			vitality_bonus = 2
-			max_hp += 2
-			hp = mini(max_hp, hp + 2)
+			vitality_bonus = int(_power("vitality"))
+			max_hp += vitality_bonus
+			hp = mini(max_hp, hp + vitality_bonus)
 			message += "\n이번 스테이지 최대 HP +2 · 현재 HP +2"
 		"blood_trade":
 			_apply_damage(2)
-			money += dig_cost * 6
+			money += dig_cost * int(_power("blood_trade"))
 		"insurance":
 			insurance_ready = true
 	_finish_action()
@@ -637,11 +660,11 @@ func _finish_action():
 		return
 	if hp <= 0:
 		_game_over("체력이 모두 소진되었습니다.")
-	elif _all_safe_revealed():
+	elif _all_mines_committed():
 		if not clear_heal_applied:
 			clear_heal_applied = true
 			if _has("medic"):
-				_heal(1)
+				_heal(int(_power("medic")))
 				message += "\n야전 의무관: 클리어 회복 +1 HP"
 		targeting = ""
 		if stage >= FINAL_STAGE:
@@ -669,37 +692,22 @@ func _finish_action():
 	_refresh()
 
 
+func _all_mines_committed() -> bool:
+	if not generated:
+		return false
+	for cell in cells:
+		if cell["mine"] and not cell.get("committed", false):
+			return false
+	return true
+
+
 func _all_safe_revealed() -> bool:
 	return generated and _hidden_safe().is_empty()
 
 
 func _check_bankruptcy():
-	if not ticket_pending.is_empty() or phase != "playing" or money >= _effective_dig_cost():
-		return
-	if not generated:
+	if phase == "playing" and not generated and money < _effective_dig_cost():
 		_game_over("첫 파기를 위한 골드가 부족합니다.")
-		return
-	# Rescue powers and an unused revival can still complete a zero-cash board.
-	if _has("revival") and not revival_used:
-		return
-	for id in ["domain", "hound", "safe_dig", "survey", "transfusion", "grant", "acceleration", "vitality", "blood_trade", "insurance"]:
-		if not _active_available(id):
-			continue
-		# Even at full HP, wrong-flag digging can spend HP before transfusion.
-		if id == "hound" and _unsettled_mines().is_empty():
-			continue
-		return
-	var possible_income = _unsettled_mines().size() * mine_reward
-	if _has("artisan") and _unsettled_mines().size() >= 3:
-		possible_income += int(_unsettled_mines().size() / 3) * mine_reward
-	# Ignore fees here deliberately: an optimistic bound avoids false bankruptcy.
-	var hp_cost = _hidden_safe().size() * _wrong_flag_damage()
-	if insurance_ready:
-		hp_cost = ceili(hp_cost * 0.5)
-	if money + possible_income < dig_cost and hp <= hp_cost:
-		_game_over("파산: 남은 정산 수입·체력·구조 액티브로도 진행할 수 없습니다.")
-	else:
-		message += "\n골드 부족: 깃발 정산으로 진행하세요."
 
 
 func _cash_reward() -> int:

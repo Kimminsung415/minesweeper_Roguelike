@@ -47,6 +47,7 @@ var detail_description: Label
 var detail_status: Label
 var detail_notes: Label
 var detail_scroll: ScrollContainer
+var detail_upgrade_button: Button
 var detail_use_button: Button
 var detail_close_button: Button
 var sidebar_scroll: ScrollContainer
@@ -236,7 +237,7 @@ func _build_ui():
 	sidebar.add_child(shop_jump_button)
 	var shop_section = VBoxContainer.new()
 	shop_section.add_theme_constant_override("separation", 8)
-	_label(shop_section, "상점 · 영역 확장", 18, "#132e50")
+	_label(shop_section, "개별 증강 강화", 18, "#132e50")
 	shop_label = _label(shop_section, "", 14, "#344459")
 	shop_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	shop_button = Button.new()
@@ -379,7 +380,7 @@ func _build_ticket_overlay():
 	var column = VBoxContainer.new()
 	column.add_theme_constant_override("separation", 14)
 	panel.add_child(column)
-	var caption = _label(column, "UPGRADE / 영역 확장", 14, "#87afce")
+	var caption = _label(column, "UPGRADE / 개별 증강 강화", 14, "#87afce")
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ticket_title = _label(column, "강화 진행 중", 31, "#eaf3ff")
 	ticket_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -476,6 +477,11 @@ func _build_augment_details():
 	detail_use_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	detail_use_button.pressed.connect(_use_detailed_active)
 	footer.add_child(detail_use_button)
+	detail_upgrade_button = Button.new()
+	detail_upgrade_button.custom_minimum_size.y = 50
+	detail_upgrade_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	detail_upgrade_button.pressed.connect(_upgrade_detailed)
+	footer.add_child(detail_upgrade_button)
 	var close_bottom = Button.new()
 	close_bottom.text = "설명 닫기"
 	close_bottom.custom_minimum_size.y = 50
@@ -526,7 +532,7 @@ func _refresh_augment_details():
 		_close_augment_details()
 		return
 	var item = Augments.ALL[detail_id]
-	detail_title.text = "%s · %s" % [item["name"], Augments.kind_label(item["kind"])]
+	detail_title.text = "%s · %s" % [item["name"], Augments.kind_label(item["kind"])] + (" · Lv.%d / 4" % _level(detail_id) if Upgrades.DATA.has(detail_id) else "")
 	detail_art.texture = Art.texture_for(detail_id)
 	detail_description.text = item["description"]
 	var status = "스테이지 %d / 10\n" % stage
@@ -575,6 +581,17 @@ func _refresh_augment_details():
 		"dig_tax": status += "\n현재 기본 파기 비용: %d골드 (무료 효과는 별도)" % dig_cost
 		"interference": status += "\n현재 미검증 깃발: %d개" % _pending_flags().size()
 		"stealth": status += "\n이 스테이지 은신지뢰: %d개" % stealth_count
+	if Upgrades.DATA.has(detail_id):
+		status = "현재 Lv.%d: %s" % [_level(detail_id), Upgrades.describe(detail_id, _level(detail_id))]
+		status += "\n다음 Lv.%d: %s" % [_level(detail_id)+1, Upgrades.describe(detail_id, _level(detail_id)+1)] if _level(detail_id)<4 else "\n최대 레벨"
+		status += "\n현재 HP %d/%d" % [hp,max_hp]
+		if item["kind"] == Augments.ACTIVE:
+			status += " · " + ("이번 스테이지 사용 완료" if detail_id in used_actives else "1회 사용 가능 (첫 파기 후)")
+		if detail_id == "revival":
+			status += " · 부활권 " + ("소모됨 · 강화해도 재충전 없음" if revival_used else "1회 남음")
+	detail_upgrade_button.visible = Upgrades.DATA.has(detail_id)
+	detail_upgrade_button.disabled = not _can_upgrade(detail_id)
+	detail_upgrade_button.text = "최대 레벨" if _level(detail_id)>=4 else "강화 · %d골드 · %d%%" % [_ticket_cost_for(detail_id), [30,20,10][_level(detail_id)-1]]
 	detail_status.text = status
 	var notes = "보유 효과는 런 종료까지 유지되며, 같은 효과는 중복 획득하지 않습니다."
 	if item["kind"] == Augments.ACTIVE:
@@ -731,7 +748,7 @@ func _create_owned_card(id: String):
 	summary.clip_text = true
 	summary.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	summary.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	owned_cards[id] = {"root": card, "icon": icon, "status": status}
+	owned_cards[id] = {"root": card, "icon": icon, "status": status, "title": title}
 
 
 func _build_board_view():
@@ -819,6 +836,8 @@ func _input(event):
 		var controls = [detail_close_button]
 		if detail_use_button.visible and not detail_use_button.disabled:
 			controls.append(detail_use_button)
+		if detail_upgrade_button.visible and not detail_upgrade_button.disabled:
+			controls.append(detail_upgrade_button)
 		var next = posmod(controls.find(focus) + (-1 if event.shift_pressed else 1), controls.size())
 		controls[next].grab_focus()
 		get_viewport().set_input_as_handled()
@@ -850,9 +869,15 @@ func _process(delta: float):
 		ticket_visual.queue_redraw()
 
 
+func _upgrade_detailed():
+	upgrade_target = detail_id
+	_purchase_ticket()
+
+
 func _purchase_ticket():
-	if detail_overlay.visible or ticket_overlay.visible or not _begin_upgrade_ticket():
+	if ticket_overlay.visible or not _begin_upgrade_ticket():
 		return
+	_close_augment_details()
 	ticket_snapshot = ticket_pending.duplicate()
 	ticket_elapsed = 0.0
 	ticket_visual.elapsed = 0.0
@@ -861,7 +886,7 @@ func _purchase_ticket():
 	ticket_progress.value = 0.0
 	ticket_title.text = "강화 진행 중"
 	ticket_title.add_theme_color_override("font_color", Color("#eaf3ff"))
-	ticket_subtitle.text = "Lv.%d → Lv.%d · 성공률 %s%% · %d골드 사용" % [expansion_level, expansion_level + 1, _ticket_chance_label(), ticket_snapshot["cost"]]
+	ticket_subtitle.text = "Lv.%d → Lv.%d · 성공률 %s%% · %d골드 사용" % [int(ticket_snapshot["level"]), int(ticket_snapshot["level"]) + 1, _ticket_chance_label(), ticket_snapshot["cost"]]
 	ticket_status.text = "마력 응축 중…"
 	ticket_close_button.text = "강화 진행 중…"
 	ticket_close_button.disabled = true
@@ -877,9 +902,9 @@ func _reveal_ticket_result():
 	var success = ticket_pending["success"]
 	_resolve_upgrade_ticket()
 	ticket_visual.result = "success" if success else "failure"
-	ticket_title.text = "영역 확장 성공!" if success else "강화 실패"
+	ticket_title.text = "%s 강화 성공!" % Augments.ALL[ticket_snapshot["id"]]["name"] if success else "강화 실패"
 	ticket_title.add_theme_color_override("font_color", Color("#ffd478" if success else "#eaa4b3"))
-	ticket_status.text = "영역 확장 Lv.%d · 모든 영역형 액티브 반경 +1" % expansion_level if success else "레벨은 유지됩니다 · 사용한 골드는 소모되었습니다"
+	ticket_status.text = Upgrades.describe(ticket_snapshot["id"], _level(ticket_snapshot["id"])) if success else "레벨은 유지됩니다 · 사용한 골드는 소모되었습니다"
 	ticket_close_button.text = "확인 · Enter / Space"
 	ticket_close_button.disabled = false
 	ticket_close_button.grab_focus()
@@ -895,7 +920,7 @@ func _close_ticket_result():
 
 
 func _open_shop():
-	sidebar_scroll.ensure_control_visible(shop_button.get_parent())
+	sidebar_scroll.ensure_control_visible(inventory_cards)
 
 
 func _ticket_chance_label() -> String:
@@ -959,18 +984,17 @@ func _refresh():
 	stats_label.text = "%d×%d · 지뢰는 확인하면 남은 수에서 차감됩니다" % [board_width, board_height]
 	remaining_mines_label.text = "남은 지뢰  %03d / %03d" % [maxi(0, mine_count - confirmed), mine_count]
 	special_mines_label.text = "특수 · 은신  %02d / %02d" % [maxi(0, stealth_count - confirmed_special), stealth_count]
-	progress_label.text = "안전 칸 %d / %d 공개 · 지뢰 %d개 정산" % [safe_opened, cells.size() - mine_count, paid]
-	progress_bar.max_value = cells.size() - mine_count
-	progress_bar.value = safe_opened
+	progress_label.text = "클리어 목표: 지뢰 Commit %d / %d · 안전 칸 %d / %d 공개" % [paid, mine_count, safe_opened, cells.size() - mine_count]
+	progress_bar.max_value = mine_count
+	progress_bar.value = paid
 	rules_label.text = "파기 비용       %d골드 (현재 %d)\n정답 정산       +%d골드\n지뢰 폭발       -%d HP\n오답 정산       -%d HP / 개" % [dig_cost, _effective_dig_cost(), mine_reward, _mine_damage(), _wrong_flag_damage()]
-	shop_label.text = "영역 확장 Lv.%d · 범위 반경 +%d칸\n영역전개 %d×%d · 스캐너 %d×%d\n안전 굴착 %d×%d" % [expansion_level, expansion_level, _active_radius("domain") * 2 + 1, _active_radius("domain") * 2 + 1, _active_radius("scanner") * 2 + 1, _active_radius("scanner") * 2 + 1, _active_radius("safe_dig") * 2 + 1, _active_radius("safe_dig") * 2 + 1]
-	shop_jump_button.text = "상점 · 영역 확장 Lv.%d · 티켓 %d골드" % [expansion_level, _ticket_cost()]
-	shop_button.text = "강화 티켓 · %d골드\n성공률 %s%% · 구매 즉시 추첨" % [_ticket_cost(), _ticket_chance_label()]
-	shop_button.disabled = not ticket_pending.is_empty() or phase != "playing" or not generated or not targeting.is_empty() or money < _ticket_cost()
-	shop_button.tooltip_text = "성공: 영역 확장 +1레벨, 다음 가격 2배·성공률 20% 감소. 실패: 골드 소모, 가격·레벨·성공률 유지. 범위 없는 액티브에는 영향 없음."
-	shop_status.text = ("첫 파기 후 구매 가능" if not generated else "실패해도 골드 소모 · 성공 시 다음 가격 2배") + ("\n" + shop_result if not shop_result.is_empty() else "")
+	shop_label.text = "보유 증강 카드 → 상세창에서 강화\nLv.1 → 2: 30% / Lv.2 → 3: 20% / Lv.3 → 4: 10%\n가격: 파기 비용 × 6 / 12 / 24"
+	shop_jump_button.text = "증강 카드에서 개별 강화 · 최대 Lv.4"
+	shop_button.visible = false
+	shop_status.text = shop_result
+
 	var pending = _pending_flags().size()
-	commit_button.text = "COMMIT · 깃발 %d개\nSpace / Enter" % pending
+	commit_button.text = "COMMIT · 대상 %d개\nSpace / Enter" % pending
 	commit_button.disabled = phase != "playing" or not generated or pending == 0 or not _communication_allows_commit()
 	commit_button.tooltip_text = "통신 장애: 3개 이상 필요. 남은 미공개·미정산 칸이 3개 미만이면 예외." if _has("interference") else "미검증 깃발 일괄 정산"
 	abandon_button.disabled = phase != "playing"
@@ -994,6 +1018,8 @@ func _refresh():
 	var buff_count = 0
 	var debuff_count = 0
 	for id in owned_cards:
+		owned_cards[id]["title"].text = Augments.ALL[id]["name"] + (" · Lv.%d/4" % _level(id) if Upgrades.DATA.has(id) else "")
+		owned_cards[id]["root"].tooltip_text = "%s · Lv.%d / 4\n%s" % [Augments.ALL[id]["name"], _level(id), Upgrades.describe(id,_level(id))]
 		owned_cards[id]["root"].visible = _has(id)
 		if id == "revival":
 			owned_cards[id]["status"].text = "패시브 · " + ("소모됨" if revival_used else "부활 1회 남음")
@@ -1024,7 +1050,7 @@ func _refresh():
 		choice_subtitle.text = "효과는 다음 스테이지부터 적용됩니다. 골드 또는 회복 보상을 하나 선택하세요."
 	elif phase == "victory":
 		choice_header.text = "10스테이지 최종 승리!"
-		choice_subtitle.text = "모든 안전 칸을 열고 마지막 탐색을 마쳤습니다."
+		choice_subtitle.text = "모든 지뢰를 Commit하고 마지막 탐색을 마쳤습니다."
 		victory_label.text = "최종 HP %d/%d · 골드 %d\n획득 버프 %d개 · 디버프 %d개\n10스테이지 뒤에는 추가 증강이나 보상 선택이 없습니다." % [hp, max_hp, money, buff_count, debuff_count]
 	var next_rules = _rules_for(stage + 1, true)
 	var next_max_hp = next_rules["max_hp"]
