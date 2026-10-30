@@ -85,7 +85,7 @@ func _build_ui():
 	var ui_theme = Theme.new()
 	var font = FontVariation.new()
 	font.base_font = load("res://assets/fonts/NotoSansKR.ttf")
-	font.variation_opentype = {"wght": 5000.0}
+	font.variation_opentype = {"wght": 700.0}
 	ui_theme.default_font = font
 	ui_theme.default_font_size = 18
 	ui_theme.set_color("font_color", "Label", Color("#202020"))
