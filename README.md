@@ -1,6 +1,6 @@
 # Mine / Ledger — 10스테이지 증강 지뢰찾기
 
-현재 릴리스: **v1.0.0+build.4 — 개별 증강 강화**. 최신 강화 규칙은 `UPGRADES.md`를 참고하세요.
+현재 릴리스: **v1.0.1+build.5 — 사이드 패널 잘림 수정**. 최신 강화 규칙은 `UPGRADES.md`를 참고하세요.
 
 브라우저 플레이: https://Kimminsung415.github.io/minesweeper_Roguelike/
 

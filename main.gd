@@ -206,11 +206,12 @@ func _build_ui():
 	sidebar_panel.add_theme_stylebox_override("panel", Widgets.bevel(true, 14))
 	body.add_child(sidebar_panel)
 	var side_scroll = ScrollContainer.new()
+	side_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	sidebar_scroll = side_scroll
 	side_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sidebar_panel.add_child(side_scroll)
 	var sidebar = VBoxContainer.new()
-	sidebar.custom_minimum_size.x = 276
+	sidebar.custom_minimum_size.x = 0
 	sidebar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sidebar.add_theme_constant_override("separation", 10)
 	side_scroll.add_child(sidebar)
@@ -259,6 +260,9 @@ func _build_ui():
 	abandon_button.text = "런 포기"
 	abandon_button.pressed.connect(_abandon)
 	sidebar.add_child(abandon_button)
+	for control in sidebar.get_children():
+		if control is Label or control is Button:
+			control.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 	_build_choice_overlay()
 	_build_augment_details()
@@ -719,7 +723,7 @@ func _create_owned_card(id: String):
 		card.add_theme_stylebox_override(state, _ability_card_style(item["kind"]))
 	if is_active:
 		active_buttons[id] = card
-	card.custom_minimum_size = Vector2(276, 90)
+	card.custom_minimum_size = Vector2(0, 90)
 	card.tooltip_text = "%s [%s]\n%s" % [item["name"], Augments.kind_label(item["kind"]), item["description"]]
 	inventory_cards.add_child(card)
 	var margin = MarginContainer.new()
@@ -743,6 +747,7 @@ func _create_owned_card(id: String):
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var status = _label(column, Augments.kind_label(item["kind"]), 13, "#48627c")
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var summary = _label(column, item["description"], 13, "#48525c")
 	summary.clip_text = true
