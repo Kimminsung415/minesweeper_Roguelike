@@ -74,11 +74,14 @@ const TICKET_ANIMATION_DURATION = 2.2
 
 
 func _ready():
+	Engine.max_fps = 30
+	OS.low_processor_usage_mode = true
 	release_info = JSON.parse_string(FileAccess.get_file_as_string("res://release.json"))
 	get_window().title = "Mine Ledger · v%s · build.%03d" % [release_info["version"], release_info["build"]]
 	rng.randomize()
 	_build_ui()
 	_new_run()
+	set_process(false)
 
 
 func _build_ui():
@@ -853,6 +856,7 @@ func _input(event):
 
 func _on_damage(_amount: int):
 	if is_instance_valid(damage_flash):
+		set_process(true)
 		damage_flash_remaining = 0.35
 		damage_flash.color.a = 0.28
 
@@ -861,7 +865,7 @@ func _process(delta: float):
 	if damage_flash_remaining > 0.0:
 		damage_flash_remaining = maxf(0.0, damage_flash_remaining - delta)
 		damage_flash.color.a = 0.28 * damage_flash_remaining / 0.35
-	if is_instance_valid(ticket_overlay) and ticket_overlay.visible:
+	if is_instance_valid(ticket_overlay) and ticket_overlay.visible and not ticket_pending.is_empty():
 		ticket_elapsed += delta
 		ticket_visual.elapsed = ticket_elapsed
 		if not ticket_pending.is_empty():
@@ -872,6 +876,8 @@ func _process(delta: float):
 			if progress >= 1.0:
 				_reveal_ticket_result()
 		ticket_visual.queue_redraw()
+	if damage_flash_remaining <= 0.0 and ticket_pending.is_empty():
+		set_process(false)
 
 
 func _upgrade_detailed():
@@ -896,6 +902,7 @@ func _purchase_ticket():
 	ticket_close_button.text = "강화 진행 중…"
 	ticket_close_button.disabled = true
 	ticket_overlay.show()
+	set_process(true)
 	var focus = get_viewport().gui_get_focus_owner()
 	if focus != null:
 		focus.release_focus()

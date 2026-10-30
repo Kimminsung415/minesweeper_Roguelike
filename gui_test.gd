@@ -20,7 +20,7 @@ func _expect(condition: bool, description: String):
 func _frames():
 	await process_frame
 	await process_frame
-	await RenderingServer.frame_post_draw
+	RenderingServer.force_draw()
 
 func _click(control: Control, button_index = MOUSE_BUTTON_LEFT):
 	if game.inventory_cards.is_ancestor_of(control):

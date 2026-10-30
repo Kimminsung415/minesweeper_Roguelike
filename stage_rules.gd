@@ -13,8 +13,7 @@ const CASH_REWARD_DIGS = 6
 
 static func dig_cost(stage_number: int) -> int:
 	var current = maxi(1, stage_number)
-	var step = current - 1
-	return 2 * current + floori(step * step / 4.0)
+	return 2 * current
 
 
 static func for_stage(stage_number: int) -> Dictionary:
