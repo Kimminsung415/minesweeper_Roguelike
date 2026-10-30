@@ -85,9 +85,9 @@ func _build_ui():
 	var ui_theme = Theme.new()
 	var font = FontVariation.new()
 	font.base_font = load("res://assets/fonts/NotoSansKR.ttf")
-	font.variation_opentype = {"wght": 500.0}
+	font.variation_opentype = {"wght": 650.0}
 	ui_theme.default_font = font
-	ui_theme.default_font_size = 16
+	ui_theme.default_font_size = 18
 	ui_theme.set_color("font_color", "Label", Color("#202020"))
 	for state in ["normal", "hover", "disabled"]:
 		ui_theme.set_stylebox(state, "Button", Widgets.bevel(false, 10))
@@ -127,7 +127,7 @@ func _build_ui():
 	layout.add_child(heading)
 	_label(heading, "지뢰찾기", 25, "#111111")
 	_label(heading, "v%s · build.%03d" % [release_info["version"], release_info["build"]], 13, "#555555")
-	stage_label = _label(heading, "", 18, "#333333")
+	stage_label = _label(heading, "", 20, "#333333")
 	stage_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
@@ -138,7 +138,7 @@ func _build_ui():
 	var board_column = VBoxContainer.new()
 	board_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_child(board_column)
-	stats_label = _label(board_column, "", 15, "#333333")
+	stats_label = _label(board_column, "", 17, "#333333")
 	var scroll = ScrollContainer.new()
 	board_scroll = scroll
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -191,7 +191,7 @@ func _build_ui():
 	grid.add_theme_constant_override("h_separation", 0)
 	grid.add_theme_constant_override("v_separation", 0)
 	board_frame.add_child(grid)
-	progress_label = _label(board_column, "", 14, "#333333")
+	progress_label = _label(board_column, "", 16, "#333333")
 	progress_bar = ProgressBar.new()
 	progress_bar.custom_minimum_size.y = 6
 	progress_bar.show_percentage = false
@@ -213,7 +213,7 @@ func _build_ui():
 	sidebar.add_theme_constant_override("separation", 10)
 	side_scroll.add_child(sidebar)
 	_label(sidebar, "탐색 / 정산", 20, "#111111")
-	rules_label = _label(sidebar, "", 16, "#222222")
+	rules_label = _label(sidebar, "", 18, "#222222")
 	rules_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	commit_button = Button.new()
 	commit_button.custom_minimum_size.y = 50
@@ -227,7 +227,7 @@ func _build_ui():
 	cancel_target_button.text = "범위 선택 취소 (우클릭 / Esc)"
 	cancel_target_button.pressed.connect(_cancel_target)
 	sidebar.add_child(cancel_target_button)
-	action_status = _label(sidebar, "", 14, "#333333")
+	action_status = _label(sidebar, "", 16, "#333333")
 	action_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	shop_jump_button = Button.new()
 	shop_jump_button.custom_minimum_size.y = 40
@@ -322,7 +322,7 @@ func _build_choice_overlay():
 		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		card_titles.append(title)
-		var description = _label(content, "", 17, "#222222")
+		var description = _label(content, "", 19, "#222222")
 		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		description.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		card_descriptions.append(description)
