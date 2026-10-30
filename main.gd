@@ -86,6 +86,7 @@ func _build_ui():
 	var font = FontVariation.new()
 	font.base_font = load("res://assets/fonts/NotoSansKR.ttf")
 	font.variation_opentype = {"wght": 750.0}
+	font.variation_embolden = 0.8
 	ui_theme.default_font = font
 	ui_theme.default_font_size = 18
 	ui_theme.set_color("font_color", "Label", Color("#202020"))
@@ -750,14 +751,16 @@ func _build_board_view():
 		grid.remove_child(child)
 		child.queue_free()
 	grid.columns = board_width
-	var number_font = theme.default_font
+	var number_font = FontVariation.new()
+	number_font.base_font = load("res://assets/fonts/NotoSansKR.ttf")
+	number_font.variation_embolden = 1.0
 	for i in range(cells.size()):
 		var button = Button.new()
 		var tile_size = 44 if board_width <= 12 else (28 if board_width >= 26 else 30)
 		button.custom_minimum_size = Vector2(tile_size, tile_size)
 		button.focus_mode = Control.FOCUS_NONE
 		button.mouse_filter = Control.MOUSE_FILTER_STOP
-		button.add_theme_font_size_override("font_size", 26 if board_width <= 12 else 20)
+		button.add_theme_font_size_override("font_size", 28 if board_width <= 12 else 22)
 		button.add_theme_font_override("font", number_font)
 		var mark = Widgets.TileMark.new()
 		mark.name = "Mark"
