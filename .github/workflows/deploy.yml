@@ -43,7 +43,10 @@ jobs:
           mkdir -p docs
           touch docs/.gdignore docs/.nojekyll
 
-          godot --headless --path . --export-release "Web" docs/index.html
+          # Give every build unique engine/PCK/WASM URLs to avoid stale browser/CDN caches.
+          build_name="game-${GITHUB_SHA}"
+          godot --headless --path . --export-release "Web" "docs/${build_name}.html"
+          mv "docs/${build_name}.html" docs/index.html
 
           cp release.json docs/build.json
 
@@ -53,7 +56,7 @@ jobs:
           cp assets/IMAGE_SOURCES.md docs/licenses/
 
           test -s docs/index.html
-          test -s docs/index.pck
+          test -s "docs/${build_name}.pck"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
