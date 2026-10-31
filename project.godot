@@ -3,6 +3,9 @@ config_version=5
 
 [application]
 config/name="증강 지뢰찾기"
+boot_splash/image="res://logo.png"
+boot_splash/fullsize=false
+boot_splash/bg_color=Color(0.055, 0.07, 0.11, 1)
 run/main_scene="res://main.tscn"
 run/max_fps=30
 run/low_processor_mode=true

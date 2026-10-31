@@ -1176,7 +1176,14 @@ func _build_mode_menu():
 	var column = VBoxContainer.new()
 	column.add_theme_constant_override("separation", 20)
 	panel.add_child(column)
-	_label(column, "증강 지뢰찾기 · 난이도 선택", 32, "#202020")
+	var logo = TextureRect.new()
+	logo.texture = load("res://logo.png")
+	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	logo.custom_minimum_size = Vector2(0,220)
+	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(logo)
+	_label(column, "난이도 선택", 26, "#202020")
 	_label(column, "두 모드 모두 8×8 시작 · 10스테이지 도전", 20, "#404040")
 	for mode in ["easy", "hard"]:
 		var button = Button.new()
