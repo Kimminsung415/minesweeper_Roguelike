@@ -49,6 +49,7 @@ jobs:
           mv "docs/${build_name}.html" docs/index.html
 
           cp release.json docs/build.json
+          cp logo.png docs/logo.png
 
           mkdir -p docs/licenses
           find LICENSES -maxdepth 1 -type f -exec cp {} docs/licenses/ \;
