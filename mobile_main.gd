@@ -1,5 +1,9 @@
 extends "res://main.gd"
 
+var choice_scroll: ScrollContainer
+var choice_touch_index = -1
+var choice_touch_origin = Vector2.ZERO
+var choice_dragged = false
 var desktop_detail_buttons = []
 var choice_info_text: Label
 var choice_info_art: TextureRect
@@ -131,6 +135,7 @@ func _mobile_dialog(overlay: Control):
 	scroll.offset_bottom = -12
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	if overlay == choice_overlay:
+		choice_scroll = scroll
 		scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
 		scroll.scroll_deadzone = 12
 		scroll.follow_focus = true
@@ -274,6 +279,13 @@ func _touch_allowed() -> bool:
 	return mobile and phase == "playing" and not effect_busy and not detail_overlay.visible and not ticket_overlay.visible and not drawer.visible and not mode_overlay.visible
 
 func _input(event):
+	if mobile and phase == "augment" and not effect_busy and not choice_info.visible:
+		if event is InputEventMouseButton and event.device == -1:
+			get_viewport().set_input_as_handled()
+			return
+		if (event is InputEventScreenTouch or event is InputEventScreenDrag) and _choice_touch(event):
+			get_viewport().set_input_as_handled()
+			return
 	if mobile and (event is InputEventScreenTouch or event is InputEventScreenDrag):
 		if _board_touch(event):
 			get_viewport().set_input_as_handled()
@@ -382,3 +394,34 @@ func _build_choice_preview():
 	choice_info.confirmed.connect(func(): _select_card(choice_info_slot))
 	add_child(choice_info)
 
+
+
+func _choice_touch(event) -> bool:
+	if not is_instance_valid(choice_scroll): return false
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			if not choice_scroll.get_global_rect().has_point(event.position): return false
+			if choice_touch_index != -1:
+				choice_dragged = true
+				return true
+			choice_touch_index = event.index
+			choice_touch_origin = event.position
+			choice_dragged = false
+			return true
+		if event.index != choice_touch_index: return false
+		choice_touch_index = -1
+		if not choice_dragged and choice_scroll.get_global_rect().has_point(event.position):
+			_choice_tap(choice_cards,event.position)
+		return true
+	if event.index != choice_touch_index: return false
+	if event.position.distance_to(choice_touch_origin)>10: choice_dragged = true
+	if choice_dragged: choice_scroll.scroll_vertical -= roundi(event.relative.y)
+	return true
+
+func _choice_tap(node: Node, position: Vector2) -> bool:
+	if node is Button and node.is_visible_in_tree() and not node.disabled and node.get_global_rect().has_point(position):
+		node.pressed.emit()
+		return true
+	for child in node.get_children():
+		if _choice_tap(child,position): return true
+	return false
