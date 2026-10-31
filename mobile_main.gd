@@ -1,5 +1,7 @@
 extends "res://main.gd"
 
+var choice_info_text: Label
+var choice_info_art: TextureRect
 var choice_info: ConfirmationDialog
 var choice_info_slot = -1
 var mobile = false
@@ -169,6 +171,21 @@ func _mobile_dialog(overlay: Control):
 		choice_info.ok_button_text = "이 증강 선택"
 		choice_info.cancel_button_text = "돌아가기"
 		choice_info.dialog_autowrap = true
+		choice_info_art = TextureRect.new()
+		choice_info_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		choice_info_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		choice_info_art.custom_minimum_size = Vector2(0,180)
+		choice_info_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var preview_content = VBoxContainer.new()
+		preview_content.custom_minimum_size.x = 420
+		preview_content.add_theme_constant_override("separation",16)
+		choice_info.add_child(preview_content)
+		preview_content.add_child(choice_info_art)
+		choice_info_text = Label.new()
+		choice_info_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		choice_info_text.custom_minimum_size = Vector2(420,160)
+		choice_info_text.add_theme_color_override("font_color",Color("#f5f5f5"))
+		preview_content.add_child(choice_info_text)
 		choice_info.confirmed.connect(func(): _select_card(choice_info_slot))
 		add_child(choice_info)
 	if overlay == detail_overlay:
@@ -181,7 +198,7 @@ func _mobile_dialog(overlay: Control):
 		parent.move_child(stack,index)
 		detail_art.reparent(stack)
 		detail_scroll.reparent(stack)
-		detail_art.custom_minimum_size = Vector2(100,100)
+		detail_art.custom_minimum_size = Vector2(180,180)
 		detail_scroll.custom_minimum_size.y = 340
 		old_row.queue_free()
 		detail_close_button.custom_minimum_size = Vector2(92,60)
@@ -323,8 +340,9 @@ func _preview_choice(slot: int):
 	if effect_busy or phase != "augment" or slot >= offered_augments.size(): return
 	choice_info_slot = slot
 	var id = offered_augments[slot]
-	choice_info.dialog_text = Augments.ALL[id]["name"] + "\n\n" + Augments.ALL[id]["description"]
-	choice_info.popup_centered(Vector2i(460,300))
+	choice_info_art.texture = Art.texture_for(id)
+	choice_info_text.text = Augments.ALL[id]["name"] + "\n\n" + Augments.ALL[id]["description"]
+	choice_info.popup_centered(Vector2i(460,500))
 
 
 func _fit_board():
