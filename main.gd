@@ -28,7 +28,7 @@ var current_hover = -1
 var choice_overlay: Control
 var choice_header: Label
 var choice_subtitle: Label
-var choice_cards: HBoxContainer
+var choice_cards: BoxContainer
 var card_buttons = []
 var card_titles = []
 var card_descriptions = []
