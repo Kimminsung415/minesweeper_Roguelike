@@ -1,4 +1,5 @@
 extends "res://run_model.gd"
+const Copy = preload("res://augment_copy.gd")
 const Widgets = preload("res://classic_widgets.gd")
 const Art = preload("res://augment_art.gd")
 const TicketArt = preload("res://ticket_animation.gd")
@@ -555,9 +556,9 @@ func _refresh_augment_details():
 		_close_augment_details()
 		return
 	var item = Augments.ALL[detail_id]
-	detail_title.text = "%s · %s" % [item["name"], Augments.kind_label(item["kind"])] + (" · Lv.%d / 4" % _level(detail_id) if Upgrades.DATA.has(detail_id) else "")
+	detail_title.text = "%s · %s" % [item["name"], Copy.kind(detail_id)] + (" · Lv.%d / 4" % _level(detail_id) if Upgrades.DATA.has(detail_id) else "")
 	detail_art.texture = Art.texture_for(detail_id)
-	detail_description.text = item["description"]
+	detail_description.text = "[%s]\n%s" % [Copy.kind(detail_id),item["description"]]
 	var status = "스테이지 %d / 10\n" % stage
 	if item["kind"] == Augments.ACTIVE:
 		status += "남은 사용: %d / 1회" % (1 if _card_ready(detail_id) and detail_id not in used_actives else 0)
@@ -607,7 +608,7 @@ func _refresh_augment_details():
 		"stealth": status += "\n이 스테이지 은신지뢰: %d개" % stealth_count
 	if Upgrades.DATA.has(detail_id):
 		status = "현재 Lv.%d: %s" % [_level(detail_id), Upgrades.describe(detail_id, _level(detail_id))]
-		status += "\n다음 Lv.%d: %s" % [_level(detail_id)+1, Upgrades.describe(detail_id, _level(detail_id)+1)] if _level(detail_id)<4 else "\n최대 레벨"
+		status += "\n\n" + Copy.level_table(detail_id)
 		status += "\n현재 HP %d/%d" % [hp,max_hp]
 		if item["kind"] == Augments.ACTIVE:
 			status += " · " + ("이번 스테이지 사용 완료" if detail_id in used_actives else "1회 사용 가능 (첫 파기 후)")
@@ -768,10 +769,10 @@ func _create_owned_card(id: String):
 	title.clip_text = true
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var status = _label(column, Augments.kind_label(item["kind"]), 13, "#48627c")
+	var status = _label(column, Copy.kind(id), 13, "#48627c")
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var summary = _label(column, item["description"], 13, "#48525c")
+	var summary = _label(column, Copy.summary(id), 13, "#48525c")
 	summary.clip_text = true
 	summary.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	summary.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1056,8 +1057,8 @@ func _refresh():
 	var buff_count = 0
 	var debuff_count = 0
 	for id in owned_cards:
-		owned_cards[id]["title"].text = Augments.ALL[id]["name"] + (" · Lv.%d/4" % _level(id) if Upgrades.DATA.has(id) else "")
-		owned_cards[id]["root"].tooltip_text = "%s · Lv.%d / 4\n%s" % [Augments.ALL[id]["name"], _level(id), Upgrades.describe(id,_level(id))]
+		owned_cards[id]["title"].text = "[%s] %s" % [Copy.kind(id),Augments.ALL[id]["name"]]
+		owned_cards[id]["root"].tooltip_text = "[%s] %s\n%s" % [Copy.kind(id),Augments.ALL[id]["name"],Copy.summary(id)]
 		owned_cards[id]["root"].visible = _has(id)
 		if id == "revival":
 			owned_cards[id]["status"].text = "패시브 · " + ("소모됨" if revival_used else "부활 1회 남음")
@@ -1085,9 +1086,8 @@ func _refresh():
 			if i < offered_augments.size():
 				var item = Augments.ALL[offered_augments[i]]
 				card_art[i].texture = Art.texture_for(offered_augments[i])
-				card_titles[i].text = "[%s]\n%s" % [Augments.kind_label(item["kind"]), item["name"]]
-				card_descriptions[i].text = item["description"]
-				if offered_levels.get(offered_augments[i],1)>1: card_titles[i].text += " · Lv.2"
+				card_titles[i].text = "[%s]\n%s" % [Copy.kind(offered_augments[i]), item["name"]]
+				card_descriptions[i].text = Copy.summary(offered_augments[i])
 	elif phase == "reward":
 		choice_header.text = "%s 선택 완료" % Augments.ALL[pending_augment]["name"]
 		choice_subtitle.text = "효과는 다음 스테이지부터 적용됩니다. 골드 또는 회복 보상을 하나 선택하세요."

@@ -183,9 +183,14 @@ func _mobile_dialog(overlay: Control):
 		preview_content.add_child(choice_info_art)
 		choice_info_text = Label.new()
 		choice_info_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		choice_info_text.custom_minimum_size = Vector2(420,160)
+		choice_info_text.custom_minimum_size = Vector2.ZERO
+		choice_info_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		choice_info_text.add_theme_color_override("font_color",Color("#f5f5f5"))
-		preview_content.add_child(choice_info_text)
+		var preview_scroll = ScrollContainer.new()
+		preview_scroll.custom_minimum_size = Vector2(420,360)
+		preview_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		preview_content.add_child(preview_scroll)
+		preview_scroll.add_child(choice_info_text)
 		choice_info.confirmed.connect(func(): _select_card(choice_info_slot))
 		add_child(choice_info)
 	if overlay == detail_overlay:
@@ -261,7 +266,7 @@ func _refresh():
 			choice_subtitle.text = "카드를 눌러 선택 · 긴 설명은 상세 버튼"
 			for i in range(offered_augments.size()):
 				var id = offered_augments[i]
-				card_titles[i].text = Augments.ALL[id]["name"] + (" · Lv.%d" % int(offered_levels.get(id,1)) if Upgrades.DATA.has(id) else "")
+				card_titles[i].text = "[%s] %s" % [Copy.kind(id),Augments.ALL[id]["name"]]
 
 func _show_augment_details(id: String):
 	if mobile: drawer.hide()
@@ -341,8 +346,8 @@ func _preview_choice(slot: int):
 	choice_info_slot = slot
 	var id = offered_augments[slot]
 	choice_info_art.texture = Art.texture_for(id)
-	choice_info_text.text = Augments.ALL[id]["name"] + "\n\n" + Augments.ALL[id]["description"]
-	choice_info.popup_centered(Vector2i(460,500))
+	choice_info_text.text = Copy.details(id,int(offered_levels.get(id,1)))
+	choice_info.popup_centered(Vector2i(460,660))
 
 
 func _fit_board():
