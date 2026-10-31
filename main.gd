@@ -3,6 +3,8 @@ const Widgets = preload("res://classic_widgets.gd")
 const Art = preload("res://augment_art.gd")
 const TicketArt = preload("res://ticket_animation.gd")
 
+var instant_card_button: Button
+var reroll_buttons = []
 var mode_overlay: Control
 var stats_label: Label
 var rules_label: Label
@@ -310,11 +312,18 @@ func _build_choice_overlay():
 	choice_cards.add_theme_constant_override("separation", 14)
 	column.add_child(choice_cards)
 	for i in range(3):
+		var slot = VBoxContainer.new()
+		choice_cards.add_child(slot)
+		var reroll_button = Button.new()
+		reroll_button.text = "리롤 · 이 슬롯 1회"
+		reroll_button.pressed.connect(_reroll_slot.bind(i))
+		slot.add_child(reroll_button)
+		reroll_buttons.append(reroll_button)
 		var card = Button.new()
 		card.custom_minimum_size = Vector2(330, 440)
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.pressed.connect(_select_card.bind(i))
-		choice_cards.add_child(card)
+		slot.add_child(card)
 		card_buttons.append(card)
 		var margin = MarginContainer.new()
 		margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -346,6 +355,10 @@ func _build_choice_overlay():
 	reward_row.add_theme_constant_override("separation", 14)
 	reward_panel.add_child(reward_row)
 	money_reward_button = Button.new()
+	instant_card_button = Button.new()
+	instant_card_button.text = "선택한 일회용 지금 사용"
+	instant_card_button.pressed.connect(_use_pending_card)
+	reward_panel.add_child(instant_card_button)
 	money_reward_button.custom_minimum_size.y = 48
 	money_reward_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	money_reward_button.pressed.connect(_choose_reward.bind("money"))
@@ -547,10 +560,10 @@ func _refresh_augment_details():
 	detail_description.text = item["description"]
 	var status = "스테이지 %d / 10\n" % stage
 	if item["kind"] == Augments.ACTIVE:
-		status += "이번 스테이지 남은 사용: %d / 1회" % (0 if detail_id in used_actives else 1)
+		status += "남은 사용: %d / 1회" % (1 if _card_ready(detail_id) and detail_id not in used_actives else 0)
 		if phase != "playing":
 			status += "\n런이 종료되어 사용할 수 없습니다."
-		elif not generated:
+		elif not generated and not item.get("one_shot",false):
 			status += "\n첫 유효한 직접 파기로 보드를 생성한 뒤 사용 가능합니다."
 		elif detail_id in used_actives:
 			status += "\n다음 스테이지에서 다시 사용할 수 있습니다."
@@ -578,7 +591,8 @@ func _refresh_augment_details():
 		"revival": status += "\n런 전체 부활권: %s" % ("이미 소모됨" if revival_used else "1회 남음")
 		"echo": status += "\n이번 스테이지 추가 공개: %d / 4회 사용" % echo_uses
 		"frugal": status += "\n처음 3회 중 남은 무료 직접 파기: %d회" % maxi(0, 3 - direct_digs)
-		"regeneration", "unstable_ground": status += "\n직접 파기 %d회 · 다음 6회 주기까지 %d회" % [direct_digs, 6 - direct_digs % 6]
+		"unstable_ground": status += "\n직접 파기 %d회 · 다음 피해까지 %d회" % [direct_digs, 30-direct_digs%30]
+		"regeneration": status += "\n직접 파기 %d회" % direct_digs
 		"shock": status += "\n첫 직접 지뢰 피해: %s" % ("이미 발생함" if shock_triggered else "아직 발생하지 않음")
 		"dividend": status += "\n첫 직접 지뢰 폭발: %s" % ("이미 발생함" if first_explosion else "아직 발생하지 않음")
 		"shield": status += "\n다음 직접 파기 방폭: %s" % ("준비됨" if shield_ready else "준비되지 않음")
@@ -601,7 +615,7 @@ func _refresh_augment_details():
 			status += " · 부활권 " + ("소모됨 · 강화해도 재충전 없음" if revival_used else "1회 남음")
 	detail_upgrade_button.visible = Upgrades.DATA.has(detail_id)
 	detail_upgrade_button.disabled = not _can_upgrade(detail_id)
-	detail_upgrade_button.text = "최대 레벨" if _level(detail_id)>=4 else "강화 · %d골드 · %d%%" % [_ticket_cost_for(detail_id), [30,20,10][_level(detail_id)-1]]
+	detail_upgrade_button.text = "최대 레벨" if _level(detail_id)>=4 else "강화 · %d골드 · %d%%" % [_ticket_cost_for(detail_id), int(([0.30,0.20,0.10][_level(detail_id)-1] + (float(_power("smith"))/100 if _has("smith") else 0))*100)]
 	detail_status.text = status
 	var notes = "보유 효과는 런 종료까지 유지되며, 같은 효과는 중복 획득하지 않습니다."
 	if item["kind"] == Augments.ACTIVE:
@@ -638,7 +652,9 @@ func _refresh_augment_details():
 		detail_use_button.text = "이번 스테이지 사용 완료"
 	elif detail_id == "blood_trade" and hp < 3:
 		detail_use_button.text = "HP 3 이상 필요"
-	elif not generated:
+	elif not _card_ready(detail_id):
+		detail_use_button.text = "소모됨 · 재활용 대기"
+	elif not generated and not item.get("one_shot",false):
 		detail_use_button.text = "첫 파기 후 사용 가능"
 
 
@@ -825,6 +841,9 @@ func _on_tile_hover(index):
 
 
 func _input(event):
+	if effect_busy:
+		get_viewport().set_input_as_handled()
+		return
 	if phase == "menu":
 		return
 	if is_instance_valid(ticket_overlay) and ticket_overlay.visible and event is InputEventKey:
@@ -921,7 +940,7 @@ func _reveal_ticket_result():
 	ticket_visual.result = "success" if success else "failure"
 	ticket_title.text = "%s 강화 성공!" % Augments.ALL[ticket_snapshot["id"]]["name"] if success else "강화 실패"
 	ticket_title.add_theme_color_override("font_color", Color("#ffd478" if success else "#eaa4b3"))
-	ticket_status.text = Upgrades.describe(ticket_snapshot["id"], _level(ticket_snapshot["id"])) if success else "레벨은 유지됩니다 · 사용한 골드는 소모되었습니다"
+	ticket_status.text = shop_result
 	ticket_close_button.text = "확인 · Enter / Space"
 	ticket_close_button.disabled = false
 	ticket_close_button.grab_focus()
@@ -973,7 +992,7 @@ func _cancel_target():
 
 
 func _select_card(index: int):
-	if phase == "augment" and index < offered_augments.size():
+	if not effect_busy and phase == "augment" and index < offered_augments.size():
 		_choose_augment(offered_augments[index])
 
 
@@ -1005,7 +1024,7 @@ func _refresh():
 	progress_bar.max_value = mine_count
 	progress_bar.value = paid
 	rules_label.text = "파기 비용       %d골드 (현재 %d)\n정답 정산       +%d골드\n지뢰 폭발       -%d HP\n오답 정산       -%d HP / 개" % [dig_cost, _effective_dig_cost(), mine_reward, _mine_damage(), _wrong_flag_damage()]
-	shop_label.text = "보유 증강 카드 → 상세창에서 강화\nLv.1 → 2: 30% / Lv.2 → 3: 20% / Lv.3 → 4: 10%\n가격: 파기 비용 × 6 / 12 / 24"
+	shop_label.text = "보유 증강 카드 → 상세창에서 강화\nLv.1 → 2: 30% / Lv.2 → 3: 20% / Lv.3 → 4: 10%\n가격: 파기 비용 × 6 / 12 / 24 · 대장장이 보정 적용"
 	shop_jump_button.text = "증강 카드에서 개별 강화 · 최대 Lv.4"
 	shop_button.visible = false
 	shop_status.text = shop_result
@@ -1024,6 +1043,8 @@ func _refresh():
 		button.disabled = false
 		button.text = ""
 		owned_cards[id]["status"].text = "액티브 · " + ("사용 완료 · 상세보기" if id in used_actives else ("대상 선택 중 · 상세보기" if id == targeting else ("상세보기 · 1회 남음" if generated else "상세보기 · 첫 파기 후")))
+		if Augments.ALL[id].get("one_shot",false):
+			owned_cards[id]["status"].text = "일회용 · " + ("사용 가능" if _card_ready(id) else "소모됨 · 재활용 대기")
 		if _has(id):
 			active_count += 1
 	action_status.text = "액티브는 첫 파기 후 사용 가능" if not generated else "직접 %d회 · 무료 %d회 · 공명 %d/4\n방폭 태세 %s" % [direct_digs, accelerated_digs, echo_uses, "준비" if shield_ready else "없음"]
@@ -1050,18 +1071,23 @@ func _refresh():
 	choice_overlay.visible = phase in ["augment", "reward", "victory"]
 	choice_cards.visible = phase == "augment"
 	reward_panel.visible = phase == "reward"
+	instant_card_button.visible = phase == "reward" and Augments.ALL.get(pending_augment,{}).get("one_shot",false)
+	instant_card_button.disabled = effect_busy or not _card_ready(pending_augment)
 	victory_panel.visible = phase == "victory"
 	if phase == "augment":
 		var kind_name = "버프" if stage % 2 == 1 else "디버프"
 		choice_header.text = "STAGE %02d 클리어 · %s 선택" % [stage, kind_name]
-		choice_subtitle.text = "%d개 중 반드시 1개 선택 · 다음 스테이지부터 런 종료까지 적용 · 중복 획득 없음\n선택 후 골드 / HP 회복 보상도 별도로 받습니다." % offered_augments.size()
+		choice_subtitle.text = "%d개 중 1개 선택 · 기본 효과는 다음 스테이지부터 · 즉시 효과는 선택 시 발동\n일회용은 보관 가능 · 선택 후 골드 / HP 회복 보상" % offered_augments.size()
 		for i in range(3):
-			card_buttons[i].visible = i < offered_augments.size()
+			card_buttons[i].get_parent().visible = i < offered_augments.size()
+			reroll_buttons[i].visible = _has("reroll")
+			reroll_buttons[i].disabled = i in rerolled_slots or effect_busy
 			if i < offered_augments.size():
 				var item = Augments.ALL[offered_augments[i]]
 				card_art[i].texture = Art.texture_for(offered_augments[i])
 				card_titles[i].text = "[%s]\n%s" % [Augments.kind_label(item["kind"]), item["name"]]
 				card_descriptions[i].text = item["description"]
+				if offered_levels.get(offered_augments[i],1)>1: card_titles[i].text += " · Lv.2"
 	elif phase == "reward":
 		choice_header.text = "%s 선택 완료" % Augments.ALL[pending_augment]["name"]
 		choice_subtitle.text = "효과는 다음 스테이지부터 적용됩니다. 골드 또는 회복 보상을 하나 선택하세요."
@@ -1186,3 +1212,26 @@ func _select_mode(mode: String):
 	difficulty = mode
 	mode_overlay.hide()
 	_new_run()
+
+
+func _effect_animation(ids: Array, chosen: String, caption: String, tear: bool = false):
+	effect_busy = true
+	_close_augment_details()
+	var visual = load("res://selection_animation.gd").new()
+	visual.ids = ids.duplicate()
+	visual.chosen = chosen
+	visual.caption = caption
+	visual.tear = tear
+	visual.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(visual)
+	var tween = create_tween()
+	tween.tween_property(visual,"progress",1.0,2.4 if not ids.is_empty() else 1.3)
+	await tween.finished
+	visual.queue_free()
+	effect_busy = false
+	_finish_action()
+	_refresh()
+
+func _use_pending_card():
+	if not effect_busy and phase == "reward" and Augments.ALL.get(pending_augment,{}).get("one_shot",false) and _card_ready(pending_augment):
+		_use_consumable(pending_augment)

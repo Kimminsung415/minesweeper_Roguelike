@@ -10,6 +10,14 @@ const HEAL_REWARD = 4
 const FINAL_STAGE = 10
 const MAX_TICKET_COST = 1152921504606846976
 
+var spent_cards = {}
+var rerolled_slots = []
+var offered_levels = {}
+var bleed_digs = 0
+var adaptation_uses = 0
+var unfair_stage = -1
+var effect_busy = false
+
 var hp = MAX_HP
 var max_hp = MAX_HP
 var money = START_MONEY
@@ -61,9 +69,13 @@ func _rules_for(number: int, with_pending: bool = false) -> Dictionary:
 	var effective = owned_augments.duplicate()
 	if with_pending and not pending_augment.is_empty():
 		effective.append(pending_augment)
-	var delta = (-int(_power("decontamination")) if "decontamination" in effective else 0) + (3 if "overcrowding" in effective else 0)
+	var delta = (-int(_power("decontamination")) if "decontamination" in effective else 0)
 	var capacity = mini(floori(rules["width"] * rules["height"] * StageRules.MAX_DENSITY), rules["width"] * rules["height"] - 9)
 	rules["mines"] = clampi(rules["mines"] + delta, 1, capacity)
+	if "cluster" in effective:
+		rules["mines"] += 4 if number < 6 else 9
+	if number == unfair_stage:
+		rules["mines"] = rules["width"] * rules["height"]
 	rules["stealth"] = 1 if "stealth" in effective else 0
 	rules["max_hp"] = maxi(1, MAX_HP + (int(_power("heart")) if "heart" in effective else 0) + (int(_power("armor")) if "armor" in effective else 0) - (2 if "weakness" in effective else 0))
 	rules["dig_cost"] += 1 if "dig_tax" in effective else 0
@@ -73,6 +85,11 @@ func _rules_for(number: int, with_pending: bool = false) -> Dictionary:
 
 
 func _new_run():
+	spent_cards.clear()
+	rerolled_slots.clear()
+	offered_levels.clear()
+	unfair_stage = -1
+	effect_busy = false
 	owned_augments.clear()
 	offered_augments.clear()
 	pending_augment = ""
@@ -91,6 +108,10 @@ func _new_run():
 
 
 func _start_stage():
+	bleed_digs = 0
+	adaptation_uses = 0
+	rerolled_slots.clear()
+	offered_levels.clear()
 	ticket_pending.clear()
 	var rules = _rules_for(stage)
 	board_width = rules["width"]
@@ -126,6 +147,11 @@ func _start_stage():
 		cells.append({"mine": false, "stealth": false, "adjacent": 0, "revealed": false, "flagged": false, "settled": false, "committed": false, "obscured": false})
 	_build_board_view()
 	message = "스테이지 %d / 10\n첫 파기는 안전합니다. 액티브는 첫 파기 후 사용 가능.\n은신지뢰: %d개" % [stage, stealth_count]
+	if _has("decontamination"):
+		var base = StageRules.for_stage(stage, difficulty)
+		var removed = mini(int(_power("decontamination")), base["mines"] - 1)
+		money += removed * mine_reward
+		message += "\n사전 제독 지원금 +%d골드" % (removed * mine_reward)
 	_check_bankruptcy()
 	_refresh()
 
@@ -172,13 +198,22 @@ func _shuffle(items: Array):
 
 
 func _generate_board(first_index: int):
-	var excluded = _area(first_index, 1)
+	var excluded = _area(first_index, 1) if stage != unfair_stage else []
+	var cluster = []
+	if _has("cluster") and stage != unfair_stage:
+		var centers = []
+		for y in range(1, board_height-1):
+			for x in range(1, board_width-1):
+				var area = _area(y*board_width+x,1)
+				if area.all(func(i): return i not in excluded): centers.append(y*board_width+x)
+		_shuffle(centers)
+		if not centers.is_empty(): cluster = _area(centers[0],1)
 	var candidates = []
 	for i in range(cells.size()):
-		if i not in excluded:
-			candidates.append(i)
+		if i not in excluded and i not in cluster: candidates.append(i)
 	_shuffle(candidates)
-	for i in range(mine_count):
+	candidates = cluster + candidates
+	for i in range(mini(mine_count,candidates.size())):
 		cells[candidates[i]]["mine"] = true
 		cells[candidates[i]]["stealth"] = i < stealth_count
 	_recount_neighbors()
@@ -203,7 +238,7 @@ func _recount_neighbors():
 
 
 func _toggle_flag(index: int):
-	if not ticket_pending.is_empty() or phase != "playing" or index < 0 or index >= cells.size():
+	if effect_busy or not ticket_pending.is_empty() or phase != "playing" or index < 0 or index >= cells.size():
 		return
 	var cell = cells[index]
 	if cell["revealed"] or cell["settled"]:
@@ -220,7 +255,7 @@ func _effective_dig_cost() -> int:
 
 func _chord_info(index: int) -> Dictionary:
 	var result = {"eligible": false, "targets": [], "cost": 0, "committed": 0, "confirmed": 0, "required": 0, "reason": ""}
-	if not ticket_pending.is_empty() or phase != "playing" or not generated or not targeting.is_empty() or index < 0 or index >= cells.size():
+	if effect_busy or not ticket_pending.is_empty() or phase != "playing" or not generated or not targeting.is_empty() or index < 0 or index >= cells.size():
 		return result
 	var cell = cells[index]
 	if not cell["revealed"] or cell["mine"] or cell["adjacent"] <= 0:
@@ -303,7 +338,7 @@ func _on_damage(_amount: int):
 
 
 func _heal_amount(amount: int) -> int:
-	return maxi(1, amount - (1 if _has("healing_loss") else 0)) if amount > 0 else 0
+	return maxi(0, amount)
 
 
 func _heal(amount: int):
@@ -312,7 +347,7 @@ func _heal(amount: int):
 
 
 func _dig(index: int):
-	if not ticket_pending.is_empty() or phase != "playing" or index < 0 or index >= cells.size():
+	if effect_busy or not ticket_pending.is_empty() or phase != "playing" or index < 0 or index >= cells.size():
 		return
 	var cell = cells[index]
 	if cell["revealed"]:
@@ -363,11 +398,22 @@ func _dig(index: int):
 				echo_uses += 1
 				opened += 1
 		message = "%d칸 공개 · 파기 -%d골드" % [opened, cost]
-	var ground_damage = 1 if _has("unstable_ground") and direct_digs % 6 == 0 else 0
+	var ground_damage = 1 if _has("unstable_ground") and direct_digs % 30 == 0 else 0
 	if ground_damage > 0:
 		message += "\n불안정 지반 -1 HP"
 	# One action resolves all damage, then revival, then surviving heal/income effects.
-	_apply_damage(mine_damage + ground_damage)
+	var bleed = 1 if bleed_digs > 0 else 0
+	bleed_digs = maxi(0, bleed_digs-1)
+	_apply_damage(mine_damage + ground_damage + bleed)
+	if mine_damage > 0 and _has("bleeding"): bleed_digs = 2
+	if cell["mine"] and _has("chain"):
+		for neighbor in _neighbors(index):
+			if hp <= 0: break
+			if cells[neighbor]["mine"] and not cells[neighbor]["revealed"] and not cells[neighbor]["settled"]:
+				cells[neighbor]["revealed"] = true
+				cells[neighbor]["settled"] = true
+				_apply_damage(_mine_damage())
+	if cell["mine"] and hp > 0: _adapt()
 	if hp > 0:
 		if first_hit and _has("shock"):
 			_heal(int(_power("shock")))
@@ -377,7 +423,7 @@ func _dig(index: int):
 			message += "\n재생 세포 +1 HP (최대 제한)"
 		if first_blast and _has("dividend"):
 			money = floori(money * _power("dividend"))
-			message += "\n폭발 배당! 보유 골드 2배"
+			message += "\n폭발 배당! 보유 골드 ×%s" % str(_power("dividend"))
 	_finish_action()
 
 
@@ -461,7 +507,7 @@ func _settle_mines(indices: Array, wrong: int = 0, manual: bool = false) -> Dict
 
 
 func _commit_flags():
-	if not ticket_pending.is_empty() or phase != "playing" or not generated:
+	if effect_busy or not ticket_pending.is_empty() or phase != "playing" or not generated:
 		return
 	if not _communication_allows_commit():
 		message = "통신 장애: 미검증 깃발을 3개 이상 설치해야 수동 Commit 가능."
@@ -502,10 +548,12 @@ func _unsettled_mines() -> Array:
 
 
 func _active_available(id: String) -> bool:
-	return ticket_pending.is_empty() and phase == "playing" and generated and hp > 0 and _has(id) and Augments.ALL.has(id) and Augments.ALL[id]["kind"] == Augments.ACTIVE and id not in used_actives and (id != "blood_trade" or hp >= 3)
+	return not effect_busy and ticket_pending.is_empty() and phase == "playing" and (generated or Augments.ALL.get(id,{}).get("one_shot",false)) and _card_ready(id) and hp > 0 and _has(id) and Augments.ALL.has(id) and Augments.ALL[id]["kind"] == Augments.ACTIVE and id not in used_actives and (id != "blood_trade" or hp >= 3)
 
 
 func _level(id: String) -> int:
+	if id in owned_augments and id != "communism" and _has("communism") and Augments.ALL.has(id) and Augments.ALL[id]["kind"] != Augments.DEBUFF:
+		return clampi(int(augment_levels.get("communism",1)),1,4)
 	return clampi(int(augment_levels.get(id, 1)), 1, 4)
 
 func _power(id: String):
@@ -515,16 +563,17 @@ func _active_radius(id: String) -> int:
 	return int(_power(id))
 
 func _ticket_cost() -> int:
-	return dig_cost * 6 * (1 << (_level(upgrade_target) - 1))
+	return _ticket_cost_for(upgrade_target)
 
 func _ticket_chance() -> float:
-	return [0.30, 0.20, 0.10, 0.0][_level(upgrade_target)-1]
+	if _level(upgrade_target) >= 4: return 0.0
+	return minf(1.0, [0.30, 0.20, 0.10, 0.0][_level(upgrade_target)-1] + (float(_power("smith"))/100.0 if _has("smith") else 0.0))
 
 func _can_upgrade(id: String) -> bool:
-	return Upgrades.DATA.has(id) and _has(id) and _level(id) < 4 and phase == "playing" and generated and ticket_pending.is_empty() and targeting.is_empty() and money >= _ticket_cost_for(id)
+	return (not _has("communism") or id == "communism") and not effect_busy and Upgrades.DATA.has(id) and _has(id) and _level(id) < 4 and phase == "playing" and generated and ticket_pending.is_empty() and targeting.is_empty() and money >= _ticket_cost_for(id)
 
 func _ticket_cost_for(id: String) -> int:
-	return dig_cost * 6 * (1 << (_level(id)-1))
+	return maxi(1, ceili(dig_cost * 6 * (1 << (_level(id)-1)) * (0.5 if _has("smith") else 1.0)))
 
 func _buy_upgrade_ticket():
 	if _begin_upgrade_ticket():
@@ -555,17 +604,23 @@ func _resolve_upgrade_ticket():
 		var id = result["id"]
 		var old_max = max_hp
 		augment_levels[id] = int(result["level"]) + 1
-		if id in ["heart", "armor"]:
+		if id in ["heart", "armor", "communism"]:
 			max_hp = _rules_for(stage)["max_hp"] + vitality_bonus
 			hp = mini(max_hp, hp + maxi(0, max_hp - old_max))
 		shop_result = "강화 성공! %s Lv.%d · -%d골드" % [Augments.ALL[id]["name"], _level(id), cost]
 	else:
 		shop_result = "강화 실패 · -%d골드 · 레벨 유지" % cost
+	if not result["success"] and _has("slip") and rng.randf() < 0.05:
+		_remove_augment(result["id"])
+		shop_result += " · 증강 파괴!"
 	message = shop_result
 	_finish_action()
 
 
 func _use_active(id: String, target: int = -1):
+	if Augments.ALL.get(id,{}).get("one_shot",false):
+		if _active_available(id): _use_consumable(id)
+		return
 	if not _active_available(id):
 		return
 	if Augments.ALL[id].get("target", false) and (target < 0 or target >= cells.size()):
@@ -588,6 +643,12 @@ func _use_active(id: String, target: int = -1):
 	targeting = ""
 	message = Augments.ALL[id]["name"] + " 사용"
 	match id:
+		"gamble":
+			var multiplier = rng.randf_range(float(_power(id)), [2.0,2.1,2.2,2.2][_level(id)-1])
+			money = floori(money * multiplier)
+			_effect_animation([], "", "가즈아!! ×%.2f → %d골드" % [multiplier,money])
+		"beast":
+			_beast_dig()
 		"domain":
 			var area_mines = []
 			for index in _area(target, _active_radius(id)):
@@ -644,9 +705,9 @@ func _use_active(id: String, target: int = -1):
 		"acceleration":
 			accelerated_digs = int(_power("acceleration"))
 		"vitality":
-			vitality_bonus = int(_power("vitality"))
-			max_hp += vitality_bonus
-			hp = mini(max_hp, hp + vitality_bonus)
+			vitality_bonus += int(_power("vitality"))
+			max_hp += int(_power("vitality"))
+			hp = mini(max_hp, hp + int(_power("vitality")))
 			message += "\n이번 스테이지 최대 HP +2 · 현재 HP +2"
 		"blood_trade":
 			_apply_damage(2)
@@ -657,7 +718,7 @@ func _use_active(id: String, target: int = -1):
 
 
 func _finish_action():
-	if not ticket_pending.is_empty() or phase != "playing":
+	if effect_busy or not ticket_pending.is_empty() or phase != "playing":
 		return
 	if hp <= 0:
 		_game_over("체력이 모두 소진되었습니다.")
@@ -672,6 +733,8 @@ func _finish_action():
 			phase = "victory"
 			message += "\n10스테이지 최종 승리!"
 		else:
+			rerolled_slots.clear()
+			offered_levels.clear()
 			phase = "augment"
 			if stage % 2 == 1:
 				var actives = Augments.pool(Augments.ACTIVE, owned_augments)
@@ -716,24 +779,28 @@ func _cash_reward() -> int:
 
 
 func _choose_augment(id: String):
-	if phase != "augment" or id not in offered_augments or id in owned_augments:
+	if effect_busy or phase != "augment" or id not in offered_augments or id in owned_augments:
 		return
 	pending_augment = id
+	augment_levels[id] = int(offered_levels.get(id,1))
+	owned_augments.append(id)
+	_on_acquired(id)
 	phase = "reward"
 	message = "%s 선택! 다음 스테이지부터 적용됩니다.\n이제 골드 또는 HP 회복을 선택하세요." % Augments.ALL[id]["name"]
 	_refresh()
 
 
 func _choose_reward(kind: String):
-	if phase != "reward" or pending_augment.is_empty() or kind not in ["money", "heal"]:
+	if effect_busy or phase != "reward" or pending_augment.is_empty() or kind not in ["money", "heal"]:
 		return
 	if kind == "money":
 		money += _cash_reward()
 	else:
 		_heal(HEAL_REWARD)
 	if pending_augment == "heart":
-		hp += 3
-	owned_augments.append(pending_augment)
+		hp += int(_power("heart"))
+	if pending_augment not in owned_augments:
+		owned_augments.append(pending_augment)
 	stage += 1
 	_start_stage()
 
@@ -748,3 +815,110 @@ func _game_over(reason: String):
 	targeting = ""
 	message = "GAME OVER\n" + reason + "\n스마일 버튼으로 다시 도전하세요."
 	_refresh()
+
+func _adapt():
+	if _has("adaptation") and adaptation_uses < int(_power("adaptation")):
+		adaptation_uses += 1
+		vitality_bonus += 1
+		max_hp += 1
+		hp += 1
+
+func _card_ready(id: String) -> bool:
+	if not Augments.ALL.get(id,{}).get("one_shot",false): return true
+	if not spent_cards.has(id): return true
+	return _has("recycle") and stage - int(spent_cards[id]) >= int(_power("recycle"))
+
+func _use_consumable(id: String):
+	var targets = []
+	if id == "cleanse":
+		for item in owned_augments:
+			if Augments.ALL[item]["kind"] == Augments.DEBUFF: targets.append(item)
+	if id == "genius":
+		for item in owned_augments:
+			if Upgrades.DATA.has(item) and _level(item) < 4 and (not _has("communism") or item == "communism"): targets.append(item)
+	if id in ["cleanse","genius"] and targets.is_empty():
+		message = "적용 대상 없음 · 일회용 사용 보존"
+		_refresh()
+		return
+	spent_cards[id] = stage
+	if id == "relief": money += 500
+	else:
+		var chosen = targets[rng.randi_range(0,targets.size()-1)]
+		if id == "cleanse": _remove_augment(chosen)
+		else:
+			var old_max = max_hp
+			augment_levels[chosen] = 4
+			_sync_hp()
+			hp = mini(max_hp,hp+maxi(0,max_hp-old_max))
+		_effect_animation(targets, chosen, "디버프 제거" if id == "cleanse" else "Lv.4 승급", id == "cleanse")
+	message = Augments.ALL[id]["name"] + " 사용 완료"
+	_refresh()
+
+func _remove_augment(id: String):
+	owned_augments.erase(id)
+	augment_levels.erase(id)
+	if id == "revival": revival_used = true
+	if id == "shield":
+		shield_charges = 0
+		shield_ready = false
+	if id == "acceleration": accelerated_digs = 0
+	if id == "insurance": insurance_ready = false
+	if id == "vitality": vitality_bonus = 0
+	if targeting == id: targeting = ""
+	_sync_hp()
+
+func _sync_hp():
+	max_hp = _rules_for(stage)["max_hp"] + vitality_bonus
+	hp = mini(hp,max_hp)
+
+func _on_acquired(id: String):
+	if id == "hynix": money = floori(money*0.5)
+	if id == "unfair": unfair_stage = stage+1
+	if id == "reversal":
+		var candidates = []
+		for item in owned_augments:
+			if Augments.ALL[item]["kind"] != Augments.DEBUFF: candidates.append(item)
+		if not candidates.is_empty():
+			var chosen = candidates[rng.randi_range(0,candidates.size()-1)]
+			_remove_augment(chosen)
+			_effect_animation(candidates,chosen,"반전술식 · 버프 무효화",true)
+	if Augments.ALL[id].get("immediate",false): _use_consumable(id)
+
+func _reroll_slot(slot: int):
+	if effect_busy or phase != "augment" or not _has("reroll") or slot in rerolled_slots or slot < 0 or slot >= offered_augments.size(): return
+	var excluded = owned_augments + offered_augments
+	var pool = Augments.pool("buff" if stage%2==1 else Augments.DEBUFF,excluded)
+	if pool.is_empty(): return
+	rerolled_slots.append(slot)
+	var id = pool[rng.randi_range(0,pool.size()-1)]
+	offered_augments[slot] = id
+	offered_levels[id] = 2 if stage%2==1 and Upgrades.DATA.has(id) and rng.randf()*100 < float(_power("reroll")) else 1
+	_refresh()
+
+func _beast_dig():
+	var candidates = []
+	for i in range(cells.size()):
+		if not cells[i]["revealed"] and not cells[i]["settled"] and not cells[i]["flagged"]: candidates.append(i)
+	_shuffle(candidates)
+	for index in candidates.slice(0,int(_power("beast"))):
+		if hp <= 0: break
+		if cells[index]["revealed"] or cells[index]["settled"]: continue
+		if cells[index]["mine"]:
+			cells[index]["revealed"] = true
+			cells[index]["settled"] = true
+			_apply_damage(_mine_damage())
+			if _has("bleeding"): bleed_digs = 2
+			if _has("chain"):
+				for neighbor in _neighbors(index):
+					if hp <= 0: break
+					if cells[neighbor]["mine"] and not cells[neighbor]["revealed"] and not cells[neighbor]["settled"]:
+						cells[neighbor]["revealed"] = true
+						cells[neighbor]["settled"] = true
+						_apply_damage(_mine_damage())
+			if hp > 0: _adapt()
+		else:
+			_reveal_one(index)
+			money += dig_cost*3
+
+func _effect_animation(_ids: Array, _chosen: String, _caption: String, _tear: bool = false):
+	pass

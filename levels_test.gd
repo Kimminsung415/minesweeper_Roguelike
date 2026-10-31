@@ -28,13 +28,13 @@ func _initialize(): call_deferred("run")
 func run():
 	g = load("res://run_model.gd").new()
 	root.add_child(g)
-	check(g.Upgrades.DATA.size()==26,"26 upgradeable buffs")
+	check(g.Upgrades.DATA.size()==33,"33 upgradeable buffs")
 	for id in g.Upgrades.DATA:
 		for level in range(1,5):
 			fixture(id,level)
 			g.upgrade_target = id
-			check(g._level(id)==level and g._ticket_cost()==12*(1<<(level-1)),"Independent level and price "+id)
-			check(is_equal_approx(g._ticket_chance(),[0.3,0.2,0.1,0.0][level-1]),"Chance "+id)
+			check(g._level(id)==level and g._ticket_cost()==(6 if id=="smith" else 12)*(1<<(level-1)),"Independent level and price "+id)
+			check(is_equal_approx(g._ticket_chance(),([0.3,0.2,0.1,0.0][level-1] + ((level-1)*0.05 if id=="smith" and level<4 else 0.0))),"Chance "+id)
 			if level==4:
 				var gold = g.money
 				var state = g.rng.state
@@ -42,7 +42,7 @@ func run():
 			else:
 				g.rng.seed = seed_for(false)
 				g._buy_upgrade_ticket()
-				check(g._level(id)==level and g.money==10000-12*(1<<(level-1)),"Failure charges once "+id)
+				check(g._level(id)==level and g.money==10000-(6 if id=="smith" else 12)*(1<<(level-1)),"Failure charges once "+id)
 				g.rng.seed = seed_for(true)
 				g._begin_upgrade_ticket()
 				var gold = g.money

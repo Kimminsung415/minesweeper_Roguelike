@@ -6,6 +6,9 @@ static var cache = {}
 static func texture_for(id: String) -> Texture2D:
 	if cache.has(id):
 		return cache[id]
+	if id == "hynix":
+		cache[id] = load("res://hynix_official.jpg")
+		return cache[id]
 	if id == "domain":
 		cache[id] = load("res://assets/domain_gojo_official.jpg")
 		return cache[id]
@@ -23,6 +26,22 @@ static func texture_for(id: String) -> Texture2D:
 
 static func _body(id: String) -> String:
 	var drawings = {
+		"communism": '<circle cx="64" cy="64" r="50" fill="#cf2028" stroke="none"/><path d="M36 40L51 25L69 43L58 54L43 40M52 44L91 91" stroke="#ffdf34" stroke-width="10"/><path d="M78 25Q112 70 68 95Q43 111 26 85Q51 102 76 79Q96 57 78 25Z" fill="#ffdf34" stroke="none"/>',
+		"gamble": '<rect x="25" y="25" width="78" height="78" rx="10" fill="#eee"/><path d="M45 47H46M80 47H81M45 80H46M80 80H81M63 63H64" stroke="#d14242" stroke-width="12"/>',
+		"beast": '<path d="M22 40L40 21L49 49L64 38L79 49L88 21L107 40L97 85L64 107L31 85Z" fill="#b8623a"/><path d="M40 65L53 70M75 70L88 65M53 87L64 94L75 87" stroke="#ffe28d"/>',
+		"adaptation": '<path d="M64 105L24 60Q13 30 40 30Q56 30 64 44Q73 30 89 30Q116 30 104 60Z" fill="#e38b67"/><path d="M64 88V52M48 67L64 51L80 67" stroke="#ffe297"/>',
+		"reroll": '<path d="M28 49A38 38 0 0 1 99 47L99 25M99 47H78M100 79A38 38 0 0 1 29 81L29 103M29 81H50" stroke="#ffdf8d" stroke-width="8"/>',
+		"recycle": '<path d="M52 24L69 24L83 47M83 47L64 42M83 47L86 27M103 64L112 80L97 101L72 101M72 101L86 88M72 101L88 113M48 102L24 101L13 81L29 56M29 56L31 75M29 56L10 60" stroke="#77dc97" stroke-width="7"/>',
+		"smith": '<path d="M24 96L84 36M64 25L80 12L112 44L98 59Z" stroke="#ffdc8d" stroke-width="12"/><path d="M26 108H108L91 87H65L49 75H22Z" fill="#9bafc4"/>',
+		"cleanse": '<path d="M35 22H93V106H35Z" fill="#a3ceb0"/><path d="M44 64H84M64 44V84" stroke="#fff" stroke-width="10"/>',
+		"relief": '<rect x="19" y="33" width="90" height="65" rx="8" fill="#d8b461"/><circle cx="64" cy="64" r="20"/><path d="M64 50V80M54 58H75"/>',
+		"genius": '<path d="M64 15L77 48L113 49L85 72L94 108L64 87L34 108L43 72L15 49L51 48Z" fill="#f2ce66"/>',
+		"bleeding": '<path d="M64 20Q15 70 33 94Q65 122 96 94Q114 70 64 20Z" fill="#df4059"/>',
+		"cluster": '<rect x="24" y="24" width="80" height="80"/><path d="M50 24V104M77 24V104M24 50H104M24 77H104"/>',
+		"chain": '<circle cx="39" cy="64" r="25"/><circle cx="90" cy="64" r="25"/><path d="M47 64H82" stroke="#ffbb5a" stroke-width="10"/>',
+		"slip": '<path d="M20 105L79 39L99 55L41 113M65 28L83 15L114 44L99 58M44 31L26 20M33 48H14" stroke="#edbc7f" stroke-width="8"/>',
+		"reversal": '<path d="M25 28H88V99H25Z" fill="#a76691"/><path d="M41 61H108M92 45L108 61L92 77" stroke="#f3dca3"/>',
+		"unfair": '<path d="M64 15L115 108H13Z" fill="#e7b147"/><path d="M64 42V76M64 90V94" stroke="#482638" stroke-width="10"/>',
 		"vitality": '<path d="M64 101L25 62Q10 35 34 26Q52 20 64 40Q76 20 94 26Q118 35 103 62Z" fill="#e77b98"/><path d="M64 43V79M46 61H82" stroke="#fff2c4" stroke-width="9"/>',
 		"blood_trade": '<path d="M43 20Q8 60 22 77Q43 96 64 77Q78 60 43 20Z" fill="#dd647b"/><circle cx="87" cy="86" r="24" fill="#efc257"/><path d="M87 72V100M77 86H97" stroke="#825922"/>',
 		"insurance": '<path d="M64 20L104 36V66Q95 95 64 111Q33 95 24 66V36Z" fill="#5a9dbb"/><path d="M64 43V82M46 63H82" stroke="#ffe3a5" stroke-width="9"/>',
