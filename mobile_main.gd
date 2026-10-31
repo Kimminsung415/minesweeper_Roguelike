@@ -1,7 +1,10 @@
 extends "res://main.gd"
 
+var choice_info: ConfirmationDialog
+var choice_info_slot = -1
 var mobile = false
 var mobile_flag = false
+var mobile_fit_zoom = 0.15
 var mobile_zoom = 1.0
 var mobile_bar: VBoxContainer
 var mobile_dig: Button
@@ -84,6 +87,8 @@ func _enable_mobile():
 		_mobile_dialog(overlay)
 	_set_flag_mode(false)
 	_apply_tile_zoom()
+	_fit_board.call_deferred()
+	for button in tile_buttons: button.tooltip_text = ""
 	_refresh()
 
 func _touch_button(parent: Node, title: String, action: Callable) -> Button:
@@ -124,6 +129,48 @@ func _mobile_dialog(overlay: Control):
 		for child in choice_cards.get_children(): child.reparent(stack)
 		choice_cards.queue_free()
 		choice_cards = stack
+		choice_cards.add_theme_constant_override("separation",8)
+		choice_header.add_theme_font_size_override("font_size",24)
+		for i in range(card_buttons.size()):
+			var card = card_buttons[i]
+			card.custom_minimum_size.y = 178
+			var margin = card.get_child(0)
+			for edge in ["left","right","top","bottom"]: margin.add_theme_constant_override("margin_"+edge,10)
+			var content = margin.get_child(0)
+			content.add_theme_constant_override("separation",6)
+			var heading = HBoxContainer.new()
+			heading.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			content.add_child(heading)
+			content.move_child(heading,0)
+			card_art[i].reparent(heading)
+			card_art[i].custom_minimum_size = Vector2(44,44)
+			card_art[i].size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			card_titles[i].reparent(heading)
+			card_titles[i].size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			card_titles[i].add_theme_font_size_override("font_size",20)
+			card_descriptions[i].add_theme_font_size_override("font_size",18)
+			card_descriptions[i].custom_minimum_size.y = 90
+			card_descriptions[i].max_lines_visible = 3
+			card_descriptions[i].text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			var tools = HBoxContainer.new()
+			var slot = card.get_parent()
+			slot.add_child(tools)
+			slot.move_child(tools,0)
+			reroll_buttons[i].reparent(tools)
+			reroll_buttons[i].custom_minimum_size.y = 42
+			reroll_buttons[i].size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var info = Button.new()
+			info.text = "상세"
+			info.custom_minimum_size = Vector2(80,42)
+			info.pressed.connect(_preview_choice.bind(i))
+			tools.add_child(info)
+		choice_info = ConfirmationDialog.new()
+		choice_info.title = "증강 상세"
+		choice_info.ok_button_text = "이 증강 선택"
+		choice_info.cancel_button_text = "돌아가기"
+		choice_info.dialog_autowrap = true
+		choice_info.confirmed.connect(func(): _select_card(choice_info_slot))
+		add_child(choice_info)
 	if overlay == detail_overlay:
 		# Stack artwork above a readable, independently scrolling description.
 		var old_row = detail_art.get_parent()
@@ -167,7 +214,7 @@ func _set_flag_mode(value: bool):
 
 func _zoom_to(value: float):
 	if effect_busy: return
-	mobile_zoom = clampf(value,0.75,2.0)
+	mobile_zoom = clampf(value,mobile_fit_zoom,2.0)
 	_apply_tile_zoom()
 
 func _apply_tile_zoom():
@@ -183,7 +230,9 @@ func _build_board_view():
 	touch_cancelled = true
 	mobile_zoom = 1.0
 	_apply_tile_zoom()
-	if mobile: _set_flag_mode(false)
+	if mobile:
+		_set_flag_mode(false)
+		_fit_board.call_deferred()
 
 func _refresh():
 	super._refresh()
@@ -191,6 +240,11 @@ func _refresh():
 		mobile_commit.disabled = commit_button.disabled or effect_busy
 		mobile_commit.text = "COMMIT %d" % _pending_flags().size()
 		mobile_cancel.disabled = targeting.is_empty()
+		if phase == "augment":
+			choice_subtitle.text = "카드를 눌러 선택 · 긴 설명은 상세 버튼"
+			for i in range(offered_augments.size()):
+				var id = offered_augments[i]
+				card_titles[i].text = Augments.ALL[id]["name"] + (" · Lv.%d" % int(offered_levels.get(id,1)) if Upgrades.DATA.has(id) else "")
 
 func _show_augment_details(id: String):
 	if mobile: drawer.hide()
@@ -200,7 +254,7 @@ func _on_tile_input(event, index):
 	if mobile and event is InputEventMouseButton:
 		if event.device == -1: return
 		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT and targeting.is_empty() and mobile_flag:
-			if phase == "playing" and not detail_overlay.visible and not ticket_overlay.visible and not drawer.visible and not effect_busy: _toggle_flag(index)
+			if phase == "playing" and not detail_overlay.visible and not ticket_overlay.visible and not drawer.visible and not effect_busy: _flag_mode_tap(index)
 			return
 	super._on_tile_input(event,index)
 
@@ -231,7 +285,7 @@ func _board_touch(event) -> bool:
 			for i in range(tile_buttons.size()):
 				if tile_buttons[i].get_global_rect().has_point(event.position):
 					if not targeting.is_empty(): _use_active(targeting,i)
-					elif mobile_flag: _toggle_flag(i)
+					elif mobile_flag: _flag_mode_tap(i)
 					else: _dig(i)
 					break
 		if fingers.is_empty(): touch_board=false
@@ -253,3 +307,34 @@ func _board_touch(event) -> bool:
 		if before>20: _zoom_to(mobile_zoom*a.distance_to(b)/before)
 	else: fingers[event.index] = event.position
 	return true
+
+
+func _refresh_tile(index):
+	super._refresh_tile(index)
+	if mobile: tile_buttons[index].tooltip_text = ""
+
+func _flag_mode_tap(index: int):
+	if cells[index]["revealed"] and not cells[index]["mine"] and cells[index]["adjacent"] > 0:
+		_dig(index)
+	else:
+		_toggle_flag(index)
+
+func _preview_choice(slot: int):
+	if effect_busy or phase != "augment" or slot >= offered_augments.size(): return
+	choice_info_slot = slot
+	var id = offered_augments[slot]
+	choice_info.dialog_text = Augments.ALL[id]["name"] + "\n\n" + Augments.ALL[id]["description"]
+	choice_info.popup_centered(Vector2i(460,300))
+
+
+func _fit_board():
+	if not mobile or not is_instance_valid(board_scroll): return
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var pixels = maxi(6,mini(52,floori(minf((board_scroll.size.x-36)/board_width,(board_scroll.size.y-36)/board_height))))
+	mobile_fit_zoom = pixels/52.0
+	mobile_zoom = mobile_fit_zoom
+	_apply_tile_zoom()
+	await get_tree().process_frame
+	board_scroll.scroll_horizontal = 0
+	board_scroll.scroll_vertical = 0
