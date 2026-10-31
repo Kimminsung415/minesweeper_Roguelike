@@ -130,6 +130,10 @@ func _mobile_dialog(overlay: Control):
 	scroll.offset_top = 12
 	scroll.offset_bottom = -12
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	if overlay == choice_overlay:
+		scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS
+		scroll.scroll_deadzone = 12
+		scroll.follow_focus = true
 	overlay.add_child(scroll)
 	panel.reparent(scroll)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -249,7 +253,7 @@ func _refresh():
 		mobile_commit.text = "COMMIT %d" % _pending_flags().size()
 		mobile_cancel.disabled = targeting.is_empty()
 		if phase == "augment":
-			choice_subtitle.text = "카드를 눌러 선택 · 긴 설명은 상세 버튼"
+			choice_subtitle.text = "카드를 눌러 선택 · 위아래 스크롤 가능 · 상세로 설명 확인"
 			for i in range(offered_augments.size()):
 				var id = offered_augments[i]
 				card_titles[i].text = "[%s] %s" % [Copy.kind(id),Augments.ALL[id]["name"]]
@@ -377,3 +381,4 @@ func _build_choice_preview():
 	preview_scroll.add_child(choice_info_text)
 	choice_info.confirmed.connect(func(): _select_card(choice_info_slot))
 	add_child(choice_info)
+
