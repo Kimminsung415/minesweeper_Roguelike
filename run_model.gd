@@ -900,7 +900,7 @@ func _beast_dig():
 	for i in range(cells.size()):
 		if not cells[i]["revealed"] and not cells[i]["settled"] and not cells[i]["flagged"]: candidates.append(i)
 	_shuffle(candidates)
-	for index in candidates.slice(0,int(_power("beast"))):
+	for index in candidates.slice(0,10):
 		if hp <= 0: break
 		if cells[index]["revealed"] or cells[index]["settled"]: continue
 		if cells[index]["mine"]:
@@ -918,7 +918,7 @@ func _beast_dig():
 			if hp > 0: _adapt()
 		else:
 			_reveal_one(index)
-			money += dig_cost*3
+			money += dig_cost*int(_power("beast"))
 
 func _effect_animation(_ids: Array, _chosen: String, _caption: String, _tear: bool = false):
 	pass

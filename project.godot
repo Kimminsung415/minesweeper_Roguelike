@@ -2,7 +2,7 @@
 config_version=5
 
 [application]
-config/name="Mine Ledger"
+config/name="증강 지뢰찾기"
 run/main_scene="res://main.tscn"
 run/max_fps=30
 run/low_processor_mode=true

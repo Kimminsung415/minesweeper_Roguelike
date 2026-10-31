@@ -1,5 +1,6 @@
 extends "res://main.gd"
 
+var desktop_detail_buttons = []
 var choice_info_text: Label
 var choice_info_art: TextureRect
 var choice_info: ConfirmationDialog
@@ -22,8 +23,19 @@ var touch_board = false
 
 func _ready():
 	super._ready()
+	_build_choice_preview()
 	get_window().size_changed.connect(_check_mobile)
 	_check_mobile()
+	if not mobile:
+		for i in range(card_buttons.size()):
+			var button = Button.new()
+			button.text = "상세 · 레벨별 수치"
+			button.custom_minimum_size.y = 44
+			button.pressed.connect(_preview_choice.bind(i))
+			var slot = card_buttons[i].get_parent()
+			slot.add_child(button)
+			slot.move_child(button,0)
+			desktop_detail_buttons.append(button)
 
 func _check_mobile():
 	var browser_touch = false
@@ -37,6 +49,7 @@ func _check_mobile():
 
 func _enable_mobile():
 	mobile = true
+	for button in desktop_detail_buttons: button.hide()
 	var body = board_scroll.get_parent().get_parent()
 	var layout = body.get_parent()
 	side_panel = sidebar_scroll.get_parent()
@@ -166,33 +179,6 @@ func _mobile_dialog(overlay: Control):
 			info.custom_minimum_size = Vector2(80,42)
 			info.pressed.connect(_preview_choice.bind(i))
 			tools.add_child(info)
-		choice_info = ConfirmationDialog.new()
-		choice_info.title = "증강 상세"
-		choice_info.ok_button_text = "이 증강 선택"
-		choice_info.cancel_button_text = "돌아가기"
-		choice_info.dialog_autowrap = true
-		choice_info_art = TextureRect.new()
-		choice_info_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		choice_info_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		choice_info_art.custom_minimum_size = Vector2(0,180)
-		choice_info_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var preview_content = VBoxContainer.new()
-		preview_content.custom_minimum_size.x = 420
-		preview_content.add_theme_constant_override("separation",16)
-		choice_info.add_child(preview_content)
-		preview_content.add_child(choice_info_art)
-		choice_info_text = Label.new()
-		choice_info_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		choice_info_text.custom_minimum_size = Vector2.ZERO
-		choice_info_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		choice_info_text.add_theme_color_override("font_color",Color("#f5f5f5"))
-		var preview_scroll = ScrollContainer.new()
-		preview_scroll.custom_minimum_size = Vector2(420,360)
-		preview_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		preview_content.add_child(preview_scroll)
-		preview_scroll.add_child(choice_info_text)
-		choice_info.confirmed.connect(func(): _select_card(choice_info_slot))
-		add_child(choice_info)
 	if overlay == detail_overlay:
 		# Stack artwork above a readable, independently scrolling description.
 		var old_row = detail_art.get_parent()
@@ -361,3 +347,33 @@ func _fit_board():
 	await get_tree().process_frame
 	board_scroll.scroll_horizontal = 0
 	board_scroll.scroll_vertical = 0
+
+
+func _build_choice_preview():
+	choice_info = ConfirmationDialog.new()
+	choice_info.title = "증강 상세"
+	choice_info.ok_button_text = "이 증강 선택"
+	choice_info.cancel_button_text = "돌아가기"
+	choice_info.dialog_autowrap = true
+	choice_info_art = TextureRect.new()
+	choice_info_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	choice_info_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	choice_info_art.custom_minimum_size = Vector2(0,180)
+	choice_info_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var preview_content = VBoxContainer.new()
+	preview_content.custom_minimum_size.x = 420
+	preview_content.add_theme_constant_override("separation",16)
+	choice_info.add_child(preview_content)
+	preview_content.add_child(choice_info_art)
+	choice_info_text = Label.new()
+	choice_info_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	choice_info_text.custom_minimum_size = Vector2.ZERO
+	choice_info_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	choice_info_text.add_theme_color_override("font_color",Color("#f5f5f5"))
+	var preview_scroll = ScrollContainer.new()
+	preview_scroll.custom_minimum_size = Vector2(420,360)
+	preview_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	preview_content.add_child(preview_scroll)
+	preview_scroll.add_child(choice_info_text)
+	choice_info.confirmed.connect(func(): _select_card(choice_info_slot))
+	add_child(choice_info)

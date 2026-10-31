@@ -43,7 +43,7 @@ const ALL = {
 	"unstable_ground": {"name": "불안정 지반", "kind": DEBUFF, "description": "매 30번째 유효한 직접 파기마다 HP 1 피해. 무료 직접 파기 포함. 액티브·연쇄 공개 제외."},
 	"settlement_fee": {"name": "정산 수수료", "kind": DEBUFF, "description": "정답이 있는 Commit마다 현재 파기 비용 1회분을 총보상에서 차감. 보상 최소 0. 자동 Commit에도 적용, 안전 확정·잔해 회수에는 미적용."},
 	"gamble": {"name": "가즈아!!", "kind": ACTIVE, "target": false, "description": "골드가 무작위 0.5~2배. 강화: 0.6~2.1 / 0.7~2.2 / 0.8~2.2배."},
-	"beast": {"name": "야수의 심장", "kind": ACTIVE, "target": false, "description": "무작위 미공개 10칸을 무료로 파기. 안전 칸마다 파기 비용 ×3 골드. 지뢰는 정상 피해. 연쇄 공개 없음."},
+	"beast": {"name": "야수의 심장", "kind": ACTIVE, "target": false, "description": "무작위 미공개 10칸을 무료로 파기. 안전 칸마다 파기 비용 ×10 골드. 지뢰는 정상 피해. 연쇄 공개 없음."},
 	"adaptation": {"name": "생존적응", "kind": PASSIVE, "target": false, "description": "직접 지뢰 폭발 생존 시 이번 스테이지 최대·현재 HP +1. 최대 3회."},
 	"communism": {"name": "공산당", "kind": PASSIVE, "target": false, "description": "모든 액티브·패시브의 유효 레벨을 공산당 레벨로 통일. 높은 레벨도 낮아짐. 다른 카드 개별 강화 불가."},
 	"reroll": {"name": "리롤돌려", "kind": PASSIVE, "target": false, "description": "앞으로 선택 화면 슬롯마다 1회 리롤. 버프 리롤 시 30% 확률로 Lv.2. 강화 시 +20%p."},

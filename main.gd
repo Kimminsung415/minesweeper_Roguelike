@@ -81,7 +81,7 @@ func _ready():
 	Engine.max_fps = 30
 	OS.low_processor_usage_mode = true
 	release_info = JSON.parse_string(FileAccess.get_file_as_string("res://release.json"))
-	get_window().title = "Mine Ledger · v%s · build.%03d" % [release_info["version"], release_info["build"]]
+	get_window().title = "증강 지뢰찾기 · v%s · build.%03d" % [release_info["version"], release_info["build"]]
 	rng.randomize()
 	_build_ui()
 	_new_run()
@@ -136,7 +136,7 @@ func _build_ui():
 
 	var heading = HBoxContainer.new()
 	layout.add_child(heading)
-	_label(heading, "지뢰찾기", 25, "#111111")
+	_label(heading, "증강 지뢰찾기", 25, "#111111")
 	_label(heading, "v%s · build.%03d" % [release_info["version"], release_info["build"]], 13, "#555555")
 	stage_label = _label(heading, "", 20, "#333333")
 	stage_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1152,23 +1152,9 @@ func _refresh_tile(index):
 	button.add_theme_color_override("font_color", ink)
 	button.add_theme_color_override("font_hover_color", ink)
 	button.add_theme_color_override("font_pressed_color", ink)
-	button.tooltip_text = "(%d, %d)" % [index % board_width + 1, int(index / board_width) + 1]
-	if cell.get("committed", false):
-		button.tooltip_text += "\nCommit 완료: 주변 파기 조건에 포함 (은신지뢰는 숫자에서 제외)."
-	elif cell["settled"] and not cell["revealed"]:
-		button.tooltip_text += "\n안전 굴착으로 확인한 지뢰: 주변 파기 조건에 포함. 추가 정산 보상 없음."
-	elif cell["revealed"] and cell["mine"]:
-		button.tooltip_text += "\n직접 폭발해 확인한 지뢰: 주변 파기 조건에 포함. 추가 피해·보상 없음."
-	# 공개된 칸도 숫자가 읽기 쉽게 disabled 대신 입력 단계에서 차단한다.
+	# Tile tooltips are intentionally hidden on both desktop and mobile.
+	button.tooltip_text = ""
 	var chord = _chord_info(index)
-	if cell["revealed"] and not cell["mine"] and cell["adjacent"] > 0:
-		button.tooltip_text += "\n숫자 칸 클릭: 주변 미공개 칸 일괄 파기"
-		if chord["eligible"]:
-			button.tooltip_text += "\n대상 %d칸 · 필요 골드 최대 %d / 보유 %d" % [chord["targets"].size(), chord["cost"], money]
-		elif not chord["reason"].is_empty():
-			button.tooltip_text += "\n" + chord["reason"]
-		if _has("stealth"):
-			button.tooltip_text += "\n은신지뢰는 숫자에 포함되지 않으며 주변 파기로도 폭발할 수 있습니다."
 	var clickable = not cell["revealed"] and not cell["settled"] or (chord["eligible"] and money >= chord["cost"])
 	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if phase == "playing" and clickable else Control.CURSOR_ARROW
 
@@ -1190,7 +1176,7 @@ func _build_mode_menu():
 	var column = VBoxContainer.new()
 	column.add_theme_constant_override("separation", 20)
 	panel.add_child(column)
-	_label(column, "지뢰찾기 · 난이도 선택", 32, "#202020")
+	_label(column, "증강 지뢰찾기 · 난이도 선택", 32, "#202020")
 	_label(column, "두 모드 모두 8×8 시작 · 10스테이지 도전", 20, "#404040")
 	for mode in ["easy", "hard"]:
 		var button = Button.new()
